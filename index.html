@@ -1,0 +1,3226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Hyperliquid Terminal — Canales de Regresión</title>
+<meta name="description" content="Terminal de trading para perpetuos de Hyperliquid con canales de regresión, VWAP, zonas de liquidación y herramientas de dibujo.">
+
+<!-- PWA -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#07100f">
+<meta name="background-color" content="#07100f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HL Terminal">
+<link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root{
+    --bg:#07100f;
+    --bg-panel:#0c1917;
+    --bg-panel-2:#0f1d1b;
+    --border:rgba(151,252,228,0.09);
+    --border-strong:rgba(151,252,228,0.18);
+    --mint:#5FE3B8;
+    --mint-bright:#97FCE4;
+    --mint-dim:rgba(95,227,184,0.35);
+    --red:#FF6B6B;
+    --red-dim:rgba(255,107,107,0.35);
+    --text:#DCEAE6;
+    --text-dim:#7C958E;
+    --text-faint:#4C625D;
+    --mono:'JetBrains Mono', monospace;
+    --sans:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;padding:0;height:100%;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    overflow:hidden;
+  }
+  #app{
+    display:flex;
+    flex-direction:column;
+    height:100vh;
+    height:100dvh;
+  }
+
+  @media (max-width: 760px){
+    .topbar{padding:6px 10px;gap:8px 12px;}
+    .brand{font-size:11px;padding-right:8px;gap:5px;}
+    .brand .dot{width:6px;height:6px;}
+    .ticker{gap:12px;}
+    .ticker .sym{font-size:14px;gap:5px;}
+    .stat{flex-direction:row;align-items:baseline;gap:4px;min-width:0;}
+    .stat .label{font-size:8.5px;}
+    .stat .value{font-size:11.5px;}
+    .btn-label, .toggle-label{display:none;}
+    .icon-btn{padding:6px 8px;}
+    .chart-toolbar{padding:6px 10px;gap:6px;}
+    .tf-btn{padding:6px 9px;}
+  }
+
+  /* ---------- TOP BAR ---------- */
+  .topbar{
+    display:flex;
+    align-items:center;
+    gap:18px;
+    padding:10px 16px;
+    background:linear-gradient(180deg, var(--bg-panel-2), var(--bg-panel));
+    border-bottom:1px solid var(--border);
+    flex-shrink:0;
+    flex-wrap:wrap;
+  }
+  .brand{
+    display:flex;align-items:center;gap:9px;
+    font-weight:800;font-size:15px;letter-spacing:.2px;color:var(--mint-bright);
+    padding-right:14px;border-right:1px solid var(--border);
+  }
+  .brand .dot{
+    width:8px;height:8px;border-radius:50%;
+    background:var(--mint);
+    box-shadow:0 0 8px var(--mint);
+  }
+  .brand .dot.live{animation:pulse 1.6s infinite;}
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 var(--mint-dim);}
+    70%{box-shadow:0 0 0 7px rgba(95,227,184,0);}
+    100%{box-shadow:0 0 0 0 rgba(95,227,184,0);}
+  }
+  .ticker{
+    display:flex;align-items:center;gap:22px;flex-wrap:wrap;
+  }
+  .ticker .sym{
+    font-size:18px;font-weight:800;color:var(--text);
+    display:flex;align-items:baseline;gap:8px;
+  }
+  .ticker .sym small{font-size:11px;font-weight:600;color:var(--text-dim);}
+  .stat{display:flex;flex-direction:column;gap:1px;min-width:74px;}
+  .stat .label{font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;}
+  .stat .value{font-family:var(--mono);font-size:14px;font-weight:600;}
+  .stat .value.up{color:var(--mint);}
+  .stat .value.down{color:var(--red);}
+  .spacer{flex:1;}
+  .topbar-right{display:flex;align-items:center;gap:10px;}
+  .icon-btn{
+    display:flex;align-items:center;gap:6px;
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    color:var(--text-dim);
+    padding:7px 12px;border-radius:7px;
+    font-size:12px;font-weight:600;cursor:pointer;
+    transition:.15s;
+    font-family:var(--sans);
+  }
+  .icon-btn:hover{border-color:var(--border-strong);color:var(--mint-bright);background:var(--bg-panel-2);}
+  .icon-btn svg{width:14px;height:14px;}
+  .icon-btn.spinning svg{animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .toggle{
+    display:flex;align-items:center;gap:7px;
+    font-size:11.5px;color:var(--text-dim);cursor:pointer;user-select:none;
+  }
+  .toggle .switch{
+    width:30px;height:16px;border-radius:9px;background:#1c2c29;position:relative;transition:.2s;border:1px solid var(--border);
+  }
+  .toggle .switch::after{
+    content:'';position:absolute;top:1px;left:1px;width:12px;height:12px;border-radius:50%;
+    background:var(--text-faint);transition:.2s;
+  }
+  .toggle.on .switch{background:rgba(95,227,184,0.18);border-color:var(--mint-dim);}
+  .toggle.on .switch::after{transform:translateX(14px);background:var(--mint);}
+
+  /* ---------- MAIN LAYOUT ---------- */
+  .main{
+    flex:1;
+    display:flex;
+    min-height:0;
+  }
+
+  /* ---------- WATCHLIST (slide-in drawer, closed by default) ---------- */
+  .wl-backdrop{
+    position:fixed;inset:0;background:rgba(2,6,6,0.6);
+    z-index:35;opacity:0;pointer-events:none;transition:opacity .2s;
+  }
+  .wl-backdrop.show{opacity:1;pointer-events:auto;}
+  .watchlist{
+    position:fixed;top:0;left:0;height:100vh;
+    width:300px;max-width:85vw;
+    flex-shrink:0;
+    background:var(--bg-panel);
+    border-right:1px solid var(--border);
+    display:flex;flex-direction:column;
+    min-height:0;
+    z-index:40;
+    box-shadow:6px 0 28px rgba(0,0,0,0.45);
+    transform:translateX(-104%);
+    transition:transform .22s ease;
+  }
+  .watchlist.open{transform:translateX(0);}
+  .wl-header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:12px 12px 10px;border-bottom:1px solid var(--border);flex-shrink:0;
+  }
+  .wl-header .title{font-weight:800;font-size:13px;color:var(--mint-bright);letter-spacing:.03em;}
+  .wl-close{
+    width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;
+    background:var(--bg);border:1px solid var(--border);color:var(--text-dim);cursor:pointer;
+  }
+  .wl-close:hover{color:var(--mint-bright);border-color:var(--border-strong);}
+  .wl-close svg{width:14px;height:14px;}
+  .wl-search{
+    padding:10px;border-bottom:1px solid var(--border);flex-shrink:0;
+  }
+  .wl-search input{
+    width:100%;background:var(--bg);border:1px solid var(--border);
+    color:var(--text);border-radius:7px;padding:8px 10px;font-size:13px;
+    font-family:var(--sans);outline:none;
+  }
+  .wl-search input:focus{border-color:var(--mint-dim);}
+  .wl-head{
+    display:grid;grid-template-columns:1.3fr 1fr .8fr;
+    padding:7px 12px;font-size:10px;color:var(--text-faint);
+    text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);flex-shrink:0;
+  }
+  .wl-list{overflow-y:auto;flex:1;min-height:0;}
+  .wl-list::-webkit-scrollbar{width:6px;}
+  .wl-list::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px;}
+  .wl-row{
+    display:grid;grid-template-columns:1.3fr 1fr .8fr;
+    padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.02);
+    transition:background .1s;align-items:center;
+  }
+  .wl-row:hover{background:var(--bg-panel-2);}
+  .wl-row.active{background:rgba(95,227,184,0.08);border-left:2px solid var(--mint);}
+  .wl-row .name{font-size:12.5px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;}
+  .wl-row .name span{color:var(--text-faint);font-weight:500;font-size:10.5px;}
+  .wl-star{
+    font-size:14px;line-height:1;cursor:pointer;color:var(--text-faint);
+    flex-shrink:0;width:16px;text-align:center;transition:color .1s,transform .1s;
+  }
+  .wl-star:hover{color:var(--text-dim);transform:scale(1.15);}
+  .wl-star.on{color:#F5B942;}
+  .wl-fav-sep{
+    padding:5px 12px;font-size:9.5px;font-weight:700;letter-spacing:.08em;color:var(--text-faint);
+    text-transform:uppercase;border-bottom:1px solid var(--border);background:var(--bg-panel);
+  }
+  .wl-row .px{font-family:var(--mono);font-size:12px;color:var(--text);text-align:right;}
+  .wl-row .chg{font-family:var(--mono);font-size:11.5px;text-align:right;font-weight:600;}
+  .wl-row .chg.up{color:var(--mint);}
+  .wl-row .chg.down{color:var(--red);}
+  .wl-empty{padding:20px;text-align:center;color:var(--text-faint);font-size:12px;}
+
+  /* ---------- CHART AREA ---------- */
+  .chart-col{
+    flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;
+  }
+  .chart-toolbar{
+    display:flex;align-items:center;gap:8px;padding:8px 14px;
+    border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;
+  }
+  .tf-group{display:flex;gap:3px;background:var(--bg-panel);padding:3px;border-radius:8px;border:1px solid var(--border);}
+  .tf-btn{
+    background:transparent;border:none;color:var(--text-dim);
+    padding:6px 11px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;
+    font-family:var(--sans);transition:.12s;
+  }
+  .tf-btn:hover{color:var(--text);}
+  .tf-btn.active{background:var(--mint);color:#04211a;}
+  .sel-group{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-dim);}
+  .sel-group select{
+    background:var(--bg-panel);border:1px solid var(--border);color:var(--text);
+    border-radius:6px;padding:6px 8px;font-size:12px;font-family:var(--sans);outline:none;cursor:pointer;
+  }
+  .toggle-wl{
+    background:var(--bg-panel);border:1px solid var(--border);color:var(--text-dim);
+    width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;
+    font-size:15px;line-height:1;flex-shrink:0;
+  }
+  .toggle-wl:hover{color:var(--mint-bright);}
+  .toggle-wl svg{width:15px;height:15px;}
+  .toggle-wl.active{color:#04211a;background:var(--mint);border-color:var(--mint);}
+  #srBtn{font-size:10px;font-weight:800;font-family:var(--mono);letter-spacing:-0.02em;}
+  .spacer-toolbar{flex:1;}
+
+  /* ---------- DRAWING TOOLS ---------- */
+  #drawCanvas{position:absolute;inset:0;z-index:4;pointer-events:none;touch-action:none;}
+
+  #drawToolbarFlyout{
+    position:absolute;top:44px;left:8px;z-index:9;display:none;
+    background:rgba(9,20,18,0.98);backdrop-filter:blur(6px);
+    border:1px solid var(--border-strong);border-radius:10px;
+    box-shadow:0 12px 32px rgba(0,0,0,0.5);
+    padding:4px;gap:2px;flex-direction:row;flex-wrap:wrap;
+    max-width:calc(100% - 16px);
+  }
+  #drawToolbarFlyout.open{display:flex;}
+  .dt-btn{
+    width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;
+    font-size:12px;font-weight:700;color:var(--text-dim);cursor:pointer;user-select:none;
+    font-family:var(--mono);flex-shrink:0;transition:.12s;
+  }
+  .dt-btn svg{width:15px;height:15px;pointer-events:none;}
+  .dt-btn:hover{color:var(--text);background:rgba(255,255,255,0.04);}
+  .dt-btn.active{background:var(--mint);color:#04211a;}
+  .dt-btn.long{color:var(--mint);}
+  .dt-btn.short{color:var(--red);}
+  .dt-btn.long.active, .dt-btn.short.active{background:var(--mint);color:#04211a;}
+  .dt-btn.danger{color:var(--red);}
+  .dt-sep{width:1px;align-self:stretch;background:var(--border);margin:2px 3px;}
+
+  .draw-sel-toolbar{
+    position:absolute;display:none;align-items:center;gap:4px;z-index:10;
+    background:rgba(9,20,18,0.98);border:1px solid var(--border-strong);border-radius:20px;padding:4px;
+    box-shadow:0 4px 14px rgba(0,0,0,0.55);transform:translate(-50%,-100%);margin-top:-8px;
+    pointer-events:auto;
+  }
+  .draw-sel-toolbar.show{display:flex;}
+  .dsb-btn{
+    width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:12px;font-weight:700;color:var(--text);cursor:pointer;user-select:none;background:rgba(255,255,255,0.08);
+    flex-shrink:0;
+  }
+  .dsb-btn.danger{background:#FF6B6B;color:#1a0505;}
+  .dsb-btn.danger.locked{background:rgba(255,255,255,0.08);color:var(--text-faint);}
+  .dsb-btn.lock-on{background:var(--mint);color:#04211a;}
+
+  #drawEditPanel{
+    display:none;position:absolute;width:220px;max-width:calc(100vw - 24px);
+    background:rgba(9,20,18,0.98);border:1px solid var(--border-strong);border-radius:10px;z-index:11;
+    box-shadow:0 14px 40px rgba(0,0,0,0.55);overflow:hidden;pointer-events:auto;
+  }
+  #drawEditPanel.open{display:block;}
+  .de-row{padding:9px 12px;border-bottom:1px solid var(--border);}
+  .de-row:last-child{border-bottom:none;}
+  .de-row-head{font-family:var(--mono);font-size:10px;color:var(--text-faint);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;}
+  .de-row input[type=color]{width:100%;height:26px;border-radius:6px;border:1px solid var(--border);background:none;padding:0;cursor:pointer;}
+  .de-slider-row{display:flex;align-items:center;gap:8px;}
+  .de-slider-row input[type=range]{flex:1;}
+  .de-rval{font-family:var(--mono);font-size:11px;color:var(--text-dim);min-width:24px;text-align:right;}
+  .de-hint{padding:12px;font-family:var(--mono);font-size:9px;color:var(--text-faint);opacity:.85;line-height:1.4;}
+
+  #liqCanvas{position:absolute;inset:0;pointer-events:none;}
+  .liq-panel{
+    position:absolute;top:12px;right:14px;z-index:8;
+    width:250px;max-width:82vw;
+    background:rgba(9,20,18,0.97);backdrop-filter:blur(6px);
+    border:1px solid var(--border-strong);border-radius:10px;
+    padding:12px;font-size:12px;color:var(--text-dim);
+    display:none;box-shadow:0 12px 32px rgba(0,0,0,0.5);
+  }
+  .liq-panel.open{display:block;}
+  .liq-panel-head{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;font-weight:700;color:var(--text);margin-bottom:9px;}
+  .liq-row-label{display:flex;align-items:center;justify-content:space-between;font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;margin:2px 0 7px;}
+  .liq-row-label .mono{font-family:var(--mono);color:var(--text-dim);text-transform:none;letter-spacing:0;}
+  .liq-panel input[type=range]{width:100%;accent-color:var(--mint);}
+  .liq-chip-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;}
+  .liq-chip{
+    padding:4px 11px;border-radius:999px;background:var(--bg);
+    border:1px solid var(--border);color:var(--text-dim);
+    font-size:11px;font-weight:700;cursor:pointer;font-family:var(--mono);
+    transition:.12s;
+  }
+  .liq-chip.active{color:#04211a;background:var(--mint);border-color:var(--mint);}
+  .liq-note{font-size:10px;line-height:1.4;color:var(--text-faint);margin-top:10px;}
+  .ch-select{
+    width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);
+    border-radius:6px;padding:6px 8px;font-size:12px;font-family:var(--sans);outline:none;cursor:pointer;
+  }
+  .ch-info{
+    margin-top:10px;padding-top:9px;border-top:1px solid var(--border);
+    font-size:10.5px;line-height:1.6;color:var(--text-dim);font-family:var(--mono);
+    white-space:pre-line;
+  }
+  .mini-toggle{
+    position:relative;width:30px;height:16px;border-radius:9px;background:#1c2c29;
+    border:1px solid var(--border);cursor:pointer;flex-shrink:0;
+  }
+  .mini-toggle::after{content:'';position:absolute;top:1px;left:1px;width:12px;height:12px;border-radius:50%;background:var(--text-faint);transition:.2s;}
+  .mini-toggle.on{background:rgba(95,227,184,0.18);border-color:var(--mint-dim);}
+  .mini-toggle.on::after{transform:translateX(14px);background:var(--mint);}
+
+  .chart-wrap{
+    flex:1;position:relative;min-height:0;background:var(--bg);
+  }
+  #chart{position:absolute;inset:0;}
+  .status-line{
+    position:absolute;bottom:8px;left:14px;z-index:5;font-size:10.5px;color:var(--text-faint);
+    font-family:var(--mono);display:flex;flex-direction:column;gap:2px;align-items:flex-start;
+    background:rgba(7,16,15,0.6);padding:4px 8px;border-radius:5px;
+  }
+  .loading-overlay{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(7,16,15,0.75);z-index:20;flex-direction:column;gap:10px;
+    color:var(--text-dim);font-size:13px;
+  }
+  .spinner{
+    width:26px;height:26px;border-radius:50%;
+    border:3px solid var(--border-strong);border-top-color:var(--mint);
+    animation:spin .8s linear infinite;
+  }
+  .error-banner{
+    position:absolute;top:12px;right:14px;z-index:6;
+    background:rgba(255,107,107,0.12);border:1px solid var(--red-dim);
+    color:var(--red);padding:8px 12px;border-radius:8px;font-size:12px;
+    max-width:320px;display:none;
+  }
+  .error-banner.show{display:block;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="topbar">
+    <div class="brand"><span class="dot live" id="liveDot"></span>HL TERMINAL</div>
+
+    <div class="ticker">
+      <div class="sym" id="symName">BTC <small>USD Perp</small></div>
+      <div class="stat"><div class="label">Precio</div><div class="value" id="statPrice">—</div></div>
+      <div class="stat"><div class="label">Cambio 24h</div><div class="value" id="statChange">—</div></div>
+      <div class="stat"><div class="label">Vol 24h</div><div class="value" id="statVolume">—</div></div>
+      <div class="stat"><div class="label">Máx / Mín</div><div class="value" id="statHiLo" style="font-size:11.5px;">—</div></div>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="topbar-right">
+      <div class="toggle on" id="autoToggle" title="Actualización en tiempo real">
+        <div class="switch"></div><span class="toggle-label">Tiempo real</span>
+      </div>
+      <button class="icon-btn" id="refreshBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg>
+        <span class="btn-label">Actualizar</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <div class="wl-backdrop" id="wlBackdrop"></div>
+    <div class="watchlist" id="watchlist">
+      <div class="wl-header">
+        <span class="title">MERCADOS</span>
+        <div class="wl-close" id="wlCloseBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </div>
+      </div>
+      <div class="wl-search"><input type="text" id="wlSearch" placeholder="Buscar activo… (BTC, ETH, LIT…)" autocomplete="off"></div>
+      <div class="wl-head"><div>Activo</div><div style="text-align:right">Precio</div><div style="text-align:right">24h</div></div>
+      <div class="wl-list" id="wlList"><div class="wl-empty">Cargando mercados…</div></div>
+    </div>
+
+    <div class="chart-col">
+      <div class="chart-toolbar">
+        <div class="toggle-wl" id="toggleWlBtn" title="Mostrar / ocultar lista">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="7" height="16" rx="1.5"/><rect x="12" y="4" width="9" height="16" rx="1.5"/></svg>
+        </div>
+        <div class="toggle-wl" id="liqBtn" title="Zonas de liquidación">💧</div>
+        <div class="toggle-wl" id="chBtn" title="Ajustes de canales">📐</div>
+        <div class="toggle-wl" id="vwapBtn" title="VWAP">Σ</div>
+        <div class="toggle-wl" id="srBtn" title="Soporte y Resistencia">S/R</div>
+        <div class="toggle-wl" id="drawToolsBtn" title="Herramientas de dibujo">✎</div>
+        <div class="tf-group" id="tfGroup"></div>
+        <div class="spacer-toolbar"></div>
+        <div class="toggle-wl" id="shareBtn" title="Compartir gráfico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v14"/></svg>
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <canvas id="liqCanvas"></canvas>
+        <div id="chart"></div>
+        <canvas id="drawCanvas"></canvas>
+
+        <div class="liq-panel" id="liqPanel">
+          <div class="liq-panel-head">
+            <span>Zonas de liquidación</span>
+            <div class="mini-toggle" id="liqOnToggle" title="Mostrar / ocultar zonas"></div>
+          </div>
+
+          <div class="liq-row-label"><span>Filtrar por apalancamiento</span></div>
+          <div class="liq-chip-row" id="liqLevChips"></div>
+
+          <div class="liq-row-label"><span>Sensibilidad</span><span id="liqThresholdVal" class="mono">0.50</span></div>
+          <input type="range" id="liqThreshold" min="10" max="90" step="1" value="50">
+
+          <div class="liq-panel-head" style="margin-top:12px;">
+            <span>Marcadores de barrido (×)</span>
+            <div class="mini-toggle" id="liqSweepToggle" title="Mostrar / ocultar marcadores"></div>
+          </div>
+          <div class="liq-note">Bandas de intensidad estimadas a partir del volumen y precio de las velas cargadas. No son datos exactos de posiciones reales de Hyperliquid.</div>
+        </div>
+
+        <div class="liq-panel" id="chPanel" style="width:268px;">
+          <div class="liq-panel-head">
+            <span>Canales de regresión</span>
+            <div class="mini-toggle" id="chOnToggle" title="Mostrar / ocultar canales"></div>
+          </div>
+
+          <div class="liq-row-label"><span>Temporalidad base</span></div>
+          <select id="chBaseIntervalSel" class="ch-select">
+            <option value="15m">15m</option>
+            <option value="30m">30m</option>
+            <option value="1h">1h</option>
+            <option value="2h">2h</option>
+            <option value="4h">4h</option>
+            <option value="8h">8h</option>
+            <option value="12h">12h</option>
+            <option value="1d">1D</option>
+          </select>
+
+          <div class="liq-row-label" style="margin-top:10px;"><span>Ancho del canal</span></div>
+          <div class="liq-chip-row">
+            <div class="liq-chip" id="chWidthStd" data-v="stddev">Desv. estándar</div>
+            <div class="liq-chip" id="chWidthExt" data-v="extreme">Mechas extremas</div>
+          </div>
+          <div class="liq-row-label" id="chStdMultRow" style="margin-top:8px;"><span>Multiplicador</span><span id="chStdMultVal" class="mono">2.0×</span></div>
+          <input type="range" id="chStdMult" min="10" max="35" step="1" value="20">
+
+          <div class="liq-row-label" style="margin-top:10px;"><span>Tamaño de bloque</span></div>
+          <div class="liq-chip-row">
+            <div class="liq-chip" id="chBlockAuto" data-v="auto">Automático</div>
+            <div class="liq-chip" id="chBlockManual" data-v="manual">Manual</div>
+          </div>
+          <div class="liq-row-label" id="chBlockSizeRow" style="margin-top:8px;"><span>Velas por bloque</span><span id="chBlockSizeVal" class="mono">42</span></div>
+          <input type="range" id="chBlockSize" min="20" max="80" step="1" value="42">
+
+          <div class="liq-row-label" style="margin-top:10px;"><span>Umbral de reversión</span><span id="chRevThVal" class="mono">0.05%/día</span></div>
+          <input type="range" id="chRevTh" min="0" max="50" step="1" value="5">
+
+          <div class="ch-info" id="chInfo">—</div>
+        </div>
+
+        <div class="liq-panel" id="vwapPanel" style="width:230px;">
+          <div class="liq-panel-head">
+            <span>VWAP</span>
+            <div class="mini-toggle" id="vwapOnToggle" title="Mostrar / ocultar VWAP"></div>
+          </div>
+
+          <div class="liq-row-label"><span>Anclaje</span></div>
+          <div class="liq-chip-row">
+            <div class="liq-chip" id="vwapAnchorSession" data-v="session">Sesión</div>
+            <div class="liq-chip" id="vwapAnchorWeek" data-v="week">Semana</div>
+            <div class="liq-chip" id="vwapAnchorAll" data-v="all">Todo</div>
+          </div>
+
+          <div class="liq-panel-head" style="margin-top:12px;">
+            <span>Bandas de desviación</span>
+            <div class="mini-toggle" id="vwapBandsToggle" title="Mostrar / ocultar bandas"></div>
+          </div>
+          <div class="liq-note">El VWAP se recalcula con las velas ya cargadas del gráfico principal, ponderando el precio típico (máx+mín+cierre)/3 por volumen.</div>
+        </div>
+
+        <div class="liq-panel" id="srPanel" style="width:250px;">
+          <div class="liq-panel-head">
+            <span>Soporte y Resistencia</span>
+            <div class="mini-toggle" id="srOnToggle" title="Mostrar / ocultar S/R"></div>
+          </div>
+
+          <div class="liq-row-label"><span>Sensibilidad de pivote</span></div>
+          <div class="liq-chip-row">
+            <div class="liq-chip" id="srStrength3" data-v="3">Sensible</div>
+            <div class="liq-chip" id="srStrength5" data-v="5">Normal</div>
+            <div class="liq-chip" id="srStrength8" data-v="8">Fuerte</div>
+          </div>
+
+          <div class="liq-row-label" style="margin-top:10px;"><span>Ventana de análisis</span></div>
+          <div class="liq-chip-row">
+            <div class="liq-chip" id="srLookback150" data-v="150">Corta</div>
+            <div class="liq-chip" id="srLookback300" data-v="300">Media</div>
+            <div class="liq-chip" id="srLookback600" data-v="600">Larga</div>
+          </div>
+
+          <div class="ch-info" id="srInfo">—</div>
+          <div class="liq-note">Detecta automáticamente el soporte y la resistencia vigentes con más toques y relevancia reciente entre los pivotes de precio; se recalcula solo y se invalida si el precio los rompe con fuerza.</div>
+        </div>
+
+        <div id="drawToolbarFlyout">
+          <div class="dt-btn active" data-tool="cursor" title="Cursor / seleccionar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l7 17 2-7 7-2z"/></svg>
+          </div>
+          <div class="dt-btn" data-tool="trend" title="Línea de tendencia">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 20L20 4"/><circle cx="4" cy="20" r="1.6" fill="currentColor" stroke="none"/><circle cx="20" cy="4" r="1.6" fill="currentColor" stroke="none"/></svg>
+          </div>
+          <div class="dt-btn" data-tool="hline" title="Línea horizontal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 12h18"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
+          </div>
+          <div class="dt-btn" data-tool="fib" title="Retroceso de Fibonacci">Fib</div>
+          <div class="dt-btn" data-tool="rect" title="Rectángulo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="6" width="16" height="12" rx="1.5"/></svg>
+          </div>
+          <div class="dt-btn long" data-tool="long" title="Posición larga">▲</div>
+          <div class="dt-btn short" data-tool="short" title="Posición corta">▼</div>
+          <div class="dt-btn" data-tool="brush" title="Pincel libre">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.06 11.9l8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4.5 2.02 2.5 0 4.5-2 4.5-4.04a3.01 3.01 0 0 0-3-3.02"/></svg>
+          </div>
+          <div class="dt-btn" data-tool="measure" title="Medir (rango, tiempo, velas, %)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="8" rx="1.3"/><path d="M7.5 8v3M11.5 8v3M15.5 8v3"/></svg>
+          </div>
+          <div class="dt-sep"></div>
+          <div class="dt-btn danger" id="btnClearDrawings" title="Borrar todos los dibujos">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
+          </div>
+        </div>
+
+        <div class="draw-sel-toolbar" id="drawSelToolbar">
+          <div class="dsb-btn" id="drawEditToolBtn" title="Editar estilo">✎</div>
+          <div class="dsb-btn" id="drawLockBtn" title="Bloquear dibujo">🔓</div>
+          <div class="dsb-btn danger" id="drawDelBtn" title="Eliminar dibujo">✕</div>
+        </div>
+
+        <div id="drawEditPanel">
+          <div class="de-row" id="deColorRow">
+            <div class="de-row-head">Color de línea</div>
+            <input type="color" id="deColor" value="#97FCE4">
+          </div>
+          <div class="de-row" id="deWidthRow">
+            <div class="de-row-head">Grosor de línea</div>
+            <div class="de-slider-row">
+              <input type="range" id="deWidth" min="1" max="4" step="0.5" value="1.5">
+              <span class="de-rval" id="deWidthVal">1.5</span>
+            </div>
+          </div>
+          <div class="de-row" id="deBgColorRow">
+            <div class="de-row-head">Color de fondo</div>
+            <input type="color" id="deBgColor" value="#7C9BFF">
+          </div>
+          <div class="de-row" id="deBgOpacityRow">
+            <div class="de-row-head">Opacidad de fondo</div>
+            <div class="de-slider-row">
+              <input type="range" id="deBgOpacity" min="5" max="50" step="1" value="14">
+              <span class="de-rval" id="deBgOpacityVal">0.14</span>
+            </div>
+          </div>
+          <div class="de-hint" id="deHint" style="display:none;">Este dibujo usa colores fijos por nivel y no admite edición de estilo.</div>
+        </div>
+
+        <div class="status-line">
+          <span id="lastUpdate"></span>
+          <span id="statusText">Iniciando…</span>
+        </div>
+        <div class="error-banner" id="errorBanner"></div>
+        <div class="loading-overlay" id="loadingOverlay"><div class="spinner"></div><div>Cargando datos de Hyperliquid…</div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================= CONFIG ============================= */
+const API = "https://api.hyperliquid.xyz/info";
+const WS_URL = "wss://api.hyperliquid.xyz/ws";
+const TIMEFRAMES = [
+  {label:"1m", value:"1m"}, {label:"5m", value:"5m"}, {label:"15m", value:"15m"},
+  {label:"30m", value:"30m"}, {label:"1h", value:"1h"}, {label:"4h", value:"4h"},
+  {label:"1D", value:"1d"}, {label:"1S", value:"1w"}
+];
+const INTERVAL_MS = {
+  "1m":60e3, "3m":180e3, "5m":300e3, "15m":900e3, "30m":1800e3,
+  "1h":3600e3, "2h":7200e3, "4h":14400e3, "8h":28800e3, "12h":43200e3,
+  "1d":86400e3, "3d":259200e3, "1w":604800e3, "1M":2592000e3
+};
+const CHANNEL_TIMEFRAMES = ["15m","30m","1h","2h","4h","8h","12h","1d"];
+const REGRESSION_LOOKBACK = 700;      // velas base a solicitar (alcanza para 3 bloques incluso en modo manual grande)
+const DEFAULT_CANDLE_COUNT = 1000;    // velas iniciales a cargar
+const LIVE_STALE_MS = 25000;          // si llevamos más de esto sin refrescar bien, se usa el resync ligero
+const LIVE_RESYNC_CANDLE_COUNT = 80;  // nº de velas del resync ligero (rápido incluso en conexiones muy lentas)
+const LIVE_POLL_MS = 5000;            // refresco de precio / última vela
+const REGRESSION_POLL_MS = 60000;     // refresco de canales
+const WATCHLIST_POLL_MS = 8000;       // refresco lista de activos
+const MAX_BACKOFF_MS = 20000;         // techo de espera cuando fallan las peticiones
+const SETTINGS_KEY = "hlTerminalSettings_v2";
+
+function loadSettings(){
+  try{
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e){ return null; }
+}
+function saveSettings(){
+  try{
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+      coin: state.coin,
+      interval: state.interval,
+      autoRefresh: state.autoRefresh,
+      liqOn: state.liqOn,
+      liqLevs: state.liqLevs,
+      liqThreshold: state.liqThreshold,
+      liqSweepOn: state.liqSweepOn,
+      chBaseInterval: state.chBaseInterval,
+      chWidthMode: state.chWidthMode,
+      chStdMult: state.chStdMult,
+      chBlockMode: state.chBlockMode,
+      chManualBlockSize: state.chManualBlockSize,
+      chReversalThreshold: state.chReversalThreshold,
+      chOn: state.chOn,
+      vwapOn: state.vwapOn,
+      vwapAnchor: state.vwapAnchor,
+      vwapBandsOn: state.vwapBandsOn,
+      srOn: state.srOn,
+      srStrength: state.srStrength,
+      srLookback: state.srLookback
+    }));
+  } catch(e){ /* almacenamiento no disponible (modo privado, cuota, etc.) — se ignora */ }
+}
+const SAVED_SETTINGS = loadSettings();
+
+/* ============================= STATE ============================= */
+let state = {
+  coin: "BTC",
+  interval: "1h",
+  candleCount: DEFAULT_CANDLE_COUNT,
+  universe: [],           // [{name, ...}]
+  assetCtxs: [],          // parallel array to universe
+  autoRefresh: true,
+  lastCandle: null,
+  loading: false,
+  earliestLoadedTime: null,  // vela más antigua ya cargada (para pedir solo lo que falta)
+  running: false,            // controla los bucles de refresco
+  mainCandles: [],           // espejo de las velas cargadas en el gráfico principal (para el mapa de liquidez)
+  liqOn: true,
+  liqLevs: [10, 25, 50, 100],
+  liqThreshold: 0.50,
+  liqSweepOn: true,
+  liqSweepColor: "#ffffff",
+  liqSweepSize: 5,
+  liqModel: null,
+  // ---- ajustes de los canales de regresión ----
+  chBaseInterval: "4h",       // temporalidad base sobre la que se calculan los canales
+  chWidthMode: "stddev",      // "stddev" (media ± N desviaciones) o "extreme" (mechas extremas)
+  chStdMult: 2.0,             // multiplicador de desviación estándar
+  chBlockMode: "auto",        // "auto" (según volatilidad/ATR) o "manual"
+  chManualBlockSize: 42,      // velas por bloque en modo manual
+  chReversalThreshold: 0.05,  // %/día mínimo de pendiente para marcar una reversión
+  chOn: true,                 // muestra u oculta por completo los canales de regresión
+  lastChannelCalc: null,      // último cálculo (para recalcular el marcador sin refetch)
+  // ---- ajustes de VWAP ----
+  vwapOn: true,
+  vwapAnchor: "session",      // "session" (se reinicia cada día UTC), "week" o "all" (todo lo cargado)
+  vwapBandsOn: true,          // bandas de desviación estándar alrededor del VWAP
+  // ---- ajustes de Soporte y Resistencia ----
+  srOn: true,
+  srStrength: 5,              // velas a cada lado requeridas para confirmar un pivote (sensibilidad)
+  srLookback: 300             // nº de velas recientes analizadas para detectar niveles
+};
+if(SAVED_SETTINGS){
+  Object.assign(state, {
+    coin: SAVED_SETTINGS.coin || state.coin,
+    interval: SAVED_SETTINGS.interval || state.interval,
+    autoRefresh: SAVED_SETTINGS.autoRefresh !== undefined ? SAVED_SETTINGS.autoRefresh : state.autoRefresh,
+    liqOn: SAVED_SETTINGS.liqOn !== undefined ? SAVED_SETTINGS.liqOn : state.liqOn,
+    liqLevs: Array.isArray(SAVED_SETTINGS.liqLevs) ? SAVED_SETTINGS.liqLevs : state.liqLevs,
+    liqThreshold: SAVED_SETTINGS.liqThreshold !== undefined ? SAVED_SETTINGS.liqThreshold : state.liqThreshold,
+    liqSweepOn: SAVED_SETTINGS.liqSweepOn !== undefined ? SAVED_SETTINGS.liqSweepOn : state.liqSweepOn,
+    chBaseInterval: SAVED_SETTINGS.chBaseInterval || state.chBaseInterval,
+    chWidthMode: SAVED_SETTINGS.chWidthMode || state.chWidthMode,
+    chStdMult: SAVED_SETTINGS.chStdMult !== undefined ? SAVED_SETTINGS.chStdMult : state.chStdMult,
+    chBlockMode: SAVED_SETTINGS.chBlockMode || state.chBlockMode,
+    chManualBlockSize: SAVED_SETTINGS.chManualBlockSize !== undefined ? SAVED_SETTINGS.chManualBlockSize : state.chManualBlockSize,
+    chReversalThreshold: SAVED_SETTINGS.chReversalThreshold !== undefined ? SAVED_SETTINGS.chReversalThreshold : state.chReversalThreshold,
+    chOn: SAVED_SETTINGS.chOn !== undefined ? SAVED_SETTINGS.chOn : state.chOn,
+    vwapOn: SAVED_SETTINGS.vwapOn !== undefined ? SAVED_SETTINGS.vwapOn : state.vwapOn,
+    vwapAnchor: SAVED_SETTINGS.vwapAnchor || state.vwapAnchor,
+    vwapBandsOn: SAVED_SETTINGS.vwapBandsOn !== undefined ? SAVED_SETTINGS.vwapBandsOn : state.vwapBandsOn,
+    srOn: SAVED_SETTINGS.srOn !== undefined ? SAVED_SETTINGS.srOn : state.srOn,
+    srStrength: SAVED_SETTINGS.srStrength !== undefined ? SAVED_SETTINGS.srStrength : state.srStrength,
+    srLookback: SAVED_SETTINGS.srLookback !== undefined ? SAVED_SETTINGS.srLookback : state.srLookback
+  });
+}
+
+/* ============================= DOM ============================= */
+const el = (id) => document.getElementById(id);
+const chartContainer = el("chart");
+const loadingOverlay = el("loadingOverlay");
+const errorBanner = el("errorBanner");
+const statusText = el("statusText");
+const lastUpdateEl = el("lastUpdate");
+
+/* ============================= HELPERS ============================= */
+function fmtPrice(p){
+  if(p === null || p === undefined || isNaN(p)) return "—";
+  const abs = Math.abs(p);
+  if(abs === 0) return "0";
+  if(abs >= 1000) return p.toLocaleString("en-US",{maximumFractionDigits:2, minimumFractionDigits:2});
+  if(abs >= 1) return p.toLocaleString("en-US",{maximumFractionDigits:4, minimumFractionDigits:2});
+  if(abs >= 0.01) return p.toFixed(6);
+  return p.toPrecision(4);
+}
+function fmtUsd(v){
+  if(v === null || v === undefined || isNaN(v)) return "—";
+  const abs = Math.abs(v);
+  if(abs >= 1e9) return "$"+(v/1e9).toFixed(2)+"B";
+  if(abs >= 1e6) return "$"+(v/1e6).toFixed(2)+"M";
+  if(abs >= 1e3) return "$"+(v/1e3).toFixed(2)+"K";
+  return "$"+v.toFixed(2);
+}
+function fmtPct(p){
+  if(p === null || p === undefined || isNaN(p)) return "—";
+  const sign = p > 0 ? "+" : "";
+  return sign + p.toFixed(2) + "%";
+}
+function nowSec(){ return Math.floor(Date.now()/1000); }
+function setStatus(txt){ statusText.textContent = txt; }
+function showError(msg){
+  errorBanner.textContent = msg;
+  errorBanner.classList.add("show");
+  clearTimeout(showError._t);
+  showError._t = setTimeout(()=>errorBanner.classList.remove("show"), 6000);
+}
+function setLoading(on){
+  state.loading = on;
+  loadingOverlay.style.display = on ? "flex" : "none";
+}
+
+async function apiPost(body, timeoutMs){
+  const ctrl = new AbortController();
+  const t = setTimeout(()=>ctrl.abort(), timeoutMs || 10000);
+  try{
+    const res = await fetch(API, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(body),
+      signal: ctrl.signal
+    });
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    return await res.json();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/* ============================= CHART SETUP ============================= */
+const chart = LightweightCharts.createChart(chartContainer, {
+  layout:{ background:{color:"transparent"}, textColor:"#8aa39c", fontFamily:"Inter, sans-serif", fontSize:11 },
+  grid:{ vertLines:{color:"rgba(151,252,228,0.045)"}, horzLines:{color:"rgba(151,252,228,0.045)"} },
+  rightPriceScale:{ borderColor:"rgba(151,252,228,0.12)", scaleMargins:{top:0.08, bottom:0.26} },
+  timeScale:{ borderColor:"rgba(151,252,228,0.12)", timeVisible:true, secondsVisible:false, rightOffset:6, barSpacing:7 },
+  crosshair:{
+    mode: LightweightCharts.CrosshairMode.Normal,
+    vertLine:{color:"rgba(151,252,228,0.35)", width:1, style:LightweightCharts.LineStyle.Dashed, labelBackgroundColor:"#0f1d1b"},
+    horzLine:{color:"rgba(151,252,228,0.35)", width:1, style:LightweightCharts.LineStyle.Dashed, labelBackgroundColor:"#0f1d1b"}
+  },
+  handleScroll:{ mouseWheel:true, pressedMouseMove:true, horzTouchDrag:true, vertTouchDrag:true },
+  handleScale:{ mouseWheel:true, pinch:true, axisPressedMouseMove:true },
+  localization:{ priceFormatter: fmtPrice }
+});
+
+const candleSeries = chart.addCandlestickSeries({
+  upColor:"#5FE3B8", downColor:"#FF6B6B",
+  wickUpColor:"#5FE3B8", wickDownColor:"#FF6B6B",
+  borderVisible:false,
+  priceFormat:{ type:"custom", formatter: fmtPrice, minMove: 0.00000001 }
+});
+
+const volumeSeries = chart.addHistogramSeries({
+  priceScaleId:"vol",
+  priceFormat:{type:"volume"},
+  color:"#3a5750"
+});
+chart.priceScale("vol").applyOptions({ scaleMargins:{ top:0.82, bottom:0 } });
+
+function makeChannelLine(color, style, width){
+  return chart.addLineSeries({
+    color: color,
+    lineWidth: width || 1,
+    lineStyle: style,
+    lastValueVisible:false,
+    priceLineVisible:false,
+    crosshairMarkerVisible:false
+  });
+}
+const SOLID = LightweightCharts.LineStyle.Solid;
+const DASHED = LightweightCharts.LineStyle.Dashed;
+const DOTTED = LightweightCharts.LineStyle.Dotted;
+const chLines = {
+  olderUpper: makeChannelLine("#3a4d47", DOTTED, 1),
+  olderLower: makeChannelLine("#3a4d47", DOTTED, 1),
+  olderMid:   makeChannelLine("#3a4d47", DASHED, 1),
+  prevUpper: makeChannelLine("#5b7a72", SOLID, 1),
+  prevLower: makeChannelLine("#5b7a72", SOLID, 1),
+  prevMid:   makeChannelLine("#5b7a72", DASHED, 1),
+  curUpper:  makeChannelLine("#97FCE4", SOLID, 2),
+  curLower:  makeChannelLine("#97FCE4", SOLID, 2),
+  curMid:    makeChannelLine("#97FCE4", DASHED, 1)
+};
+// El canal actual muestra el precio exacto de sus bordes en el eje —una referencia numérica
+// directa de "hasta dónde llega la zona", en vez de tener que estimarlo a ojo sobre el gráfico.
+[chLines.curUpper, chLines.curLower].forEach(line=>{
+  line.applyOptions({ lastValueVisible:true, priceLineVisible:true, priceLineStyle: DOTTED, priceLineWidth:1 });
+});
+
+/* ---- VWAP ---- */
+const vwapLine = chart.addLineSeries({
+  color:"#F5B942", lineWidth:2, lastValueVisible:true, priceLineVisible:false, crosshairMarkerVisible:false,
+  priceFormat:{ type:"custom", formatter: fmtPrice, minMove: 0.00000001 }
+});
+const vwapUpperLine = chart.addLineSeries({
+  color:"rgba(245,185,66,0.4)", lineWidth:1, lineStyle: DOTTED, lastValueVisible:false, priceLineVisible:false, crosshairMarkerVisible:false
+});
+const vwapLowerLine = chart.addLineSeries({
+  color:"rgba(245,185,66,0.4)", lineWidth:1, lineStyle: DOTTED, lastValueVisible:false, priceLineVisible:false, crosshairMarkerVisible:false
+});
+
+new ResizeObserver(entries=>{
+  for(const entry of entries){
+    const {width, height} = entry.contentRect;
+    chart.resize(width, height);
+  }
+  resizeLiqCanvas();
+  drawLiquidityOverlay();
+  resizeDrawCanvas();
+  redrawDrawings();
+}).observe(chartContainer);
+
+/* ============================= HERRAMIENTAS DE DIBUJO =============================
+   Capa de dibujo en un canvas propio (drawCanvas, no interactivo — solo pinta),
+   superpuesta al gráfico igual que el mapa de liquidez. La interacción (crear,
+   seleccionar, mover, redimensionar y borrar dibujos) se captura en la FASE DE
+   CAPTURA de "pointerdown" sobre #chart (chartContainer): si el toque no corresponde
+   a una herramienta activa ni a un dibujo existente, NO se detiene la propagación y
+   el evento sigue su camino normal hacia el gráfico (pan/zoom/crosshair nativos de
+   lightweight-charts siguen funcionando exactamente igual que antes). Los trazos se
+   guardan por símbolo+temporalidad en localStorage. */
+const DRAWINGS_KEY = "hlTerminalDrawings_v1";
+const DRAW_COLORS = { trend:"#97FCE4", hline:"#F5B942", fib:"#97FCE4", rect:"#7C9BFF", long:"#5FE3B8", short:"#FF6B6B", brush:"#C084FC", measure:"#7C9BFF" };
+const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+const FIB_COLORS = ["#7C958E", "#FF6B6B", "#F5B942", "#F5B942", "#5FE3B8", "#7C9BFF", "#7C958E"];
+
+function loadAllDrawings(){
+  try{ return JSON.parse(localStorage.getItem(DRAWINGS_KEY)) || {}; }
+  catch(e){ return {}; }
+}
+function saveAllDrawings(){
+  try{ localStorage.setItem(DRAWINGS_KEY, JSON.stringify(allDrawings)); }
+  catch(e){ /* almacenamiento no disponible — se ignora */ }
+}
+let allDrawings = loadAllDrawings();
+function drawingsKeyForChart(){ return state.coin + "|" + state.interval; }
+function getDrawings(){
+  const k = drawingsKeyForChart();
+  if(!allDrawings[k]) allDrawings[k] = [];
+  return allDrawings[k];
+}
+function findDrawing(id){ return getDrawings().find(d => d.id === id) || null; }
+let _drawSeq = 1;
+function newDrawId(){ return "d" + Date.now() + "_" + (_drawSeq++); }
+
+function hexA(hex, a){
+  hex = (hex || "#5FE3B8").replace("#", "");
+  if(hex.length === 3) hex = hex.split("").map(c=>c+c).join("");
+  const r = parseInt(hex.substring(0,2),16) || 0, g = parseInt(hex.substring(2,4),16) || 0, b = parseInt(hex.substring(4,6),16) || 0;
+  return `rgba(${r},${g},${b},${a})`;
+}
+// Formatea una duración en segundos como "1d 4h", "3h 20m", "45m", "12s", etc.
+function fmtDuration(sec){
+  sec = Math.max(0, Math.round(sec));
+  const d = Math.floor(sec/86400); sec -= d*86400;
+  const h = Math.floor(sec/3600); sec -= h*3600;
+  const m = Math.floor(sec/60); sec -= m*60;
+  const parts = [];
+  if(d) parts.push(d+"d");
+  if(h) parts.push(h+"h");
+  if(!d && m) parts.push(m+"m");
+  if(!d && !h && !m) parts.push(sec+"s");
+  return parts.join(" ") || "0s";
+}
+
+/* ---- Estado de la herramienta activa / selección / arrastre ---- */
+let drawState = {
+  tool: "cursor",          // "cursor" | "trend" | "hline" | "fib" | "rect" | "long" | "short" | "brush"
+  selectedId: null,
+  pendingPoint: null,      // primer punto de una herramienta de 2 toques (trend/fib/rect)
+  preview: null,           // dibujo provisional mientras se define (línea punteada)
+  brushPts: null,
+  brushDrawing: false
+};
+let dragInfo = null;       // {id, key, startTime, startPrice, orig}
+let lastHandles = [];      // asas clicables del último frame renderizado: [{id,key,x,y}]
+let lastSelAnchor = null;  // punto de anclaje del dibujo seleccionado (para las barras flotantes)
+const ownedPointerIds = new Set();
+let editPanelOpenId = null;
+
+const drawCanvas = el("drawCanvas");
+const drawCtx = drawCanvas.getContext("2d");
+
+/* ---- Interacción: fase de captura sobre el wrapper del gráfico (chart-wrap), que es
+   ANCESTRO tanto de #chart (gráfico real) como de #drawCanvas (nuestra capa). Así el
+   listener se entera de cada toque sin importar cuál de los dos hijos resultó "tocado"
+   según el pointer-events de cada uno. Cuando decidimos poseer el gesto (herramienta
+   activa, arrastre de asa, dibujo seleccionado, pincel) además de detener la propagación
+   ponemos drawCanvas en pointer-events:auto ("escudo"): así los eventos táctiles nativos
+   (que no respetan pointerCapture) también quedan bloqueados y el gráfico deja de recibir
+   el pan/zoom mientras dibujamos. En reposo (cursor + nada seleccionado) el escudo se
+   apaga y el pan/zoom/crosshair nativos vuelven a funcionar exactamente igual que antes. */
+const chartWrapEl = chartContainer.closest(".chart-wrap") || chartContainer.parentElement;
+let _shieldOn = null;
+function syncDrawShield(){
+  const shieldOn = (drawState.tool !== "cursor") || !!drawState.selectedId || drawState.brushDrawing || !!dragInfo;
+  if(shieldOn !== _shieldOn){
+    drawCanvas.style.pointerEvents = shieldOn ? "auto" : "none";
+    _shieldOn = shieldOn;
+  }
+}
+
+function resizeDrawCanvas(){
+  const rect = chartContainer.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  drawCanvas.width = Math.max(1, Math.round(rect.width*dpr));
+  drawCanvas.height = Math.max(1, Math.round(rect.height*dpr));
+  drawCanvas.style.width = rect.width+"px";
+  drawCanvas.style.height = rect.height+"px";
+  drawCtx.setTransform(dpr,0,0,dpr,0,0);
+}
+
+function barDurationSec(){
+  return (INTERVAL_MS[state.interval] || 3600e3) / 1000;
+}
+/* Conversión tiempo<->coordenada basada en índice LÓGICO (no en el tiempo/rango visible):
+   así se puede proyectar cualquier dibujo indefinidamente hacia el futuro o el pasado,
+   sin quedar limitado por la última vela cargada ni por el margen derecho del gráfico.
+   El punto de anclaje usado es SIEMPRE la última vela real (state.lastCandle), convertida
+   a índice lógico a través del propio timeScale del gráfico. Antes se anclaba en la
+   primera vela de nuestro propio arreglo (state.mainCandles[0]), pero ese arreglo va
+   recortando velas viejas por delante en sesiones largas (para no crecer sin límite),
+   mientras la serie real del gráfico NO se recorta — con el tiempo el ancla quedaba
+   desalineada del índice lógico real y los dibujos (sobre todo largo/corto, creados con
+   coordenadas relativas a "ahora") terminaban dibujándose muy lejos, hacia la izquierda. */
+function getLogicalAnchor(){
+  if(!state.lastCandle) return null;
+  const x = chart.timeScale().timeToCoordinate(state.lastCandle.time);
+  if(x == null) return null;
+  const logical = chart.timeScale().coordinateToLogical(x);
+  if(logical == null) return null;
+  return { time: state.lastCandle.time, logical };
+}
+function drawTimeToX(t){
+  const anchor = getLogicalAnchor();
+  if(!anchor) return chart.timeScale().timeToCoordinate(t);
+  const dur = barDurationSec();
+  const logical = anchor.logical + (t - anchor.time)/dur;
+  return chart.timeScale().logicalToCoordinate(logical);
+}
+function drawPriceToY(p){ return candleSeries.priceToCoordinate(p); }
+function drawYToPrice(y){ return candleSeries.coordinateToPrice(y); }
+function drawXToTimeSafe(x){
+  const anchor = getLogicalAnchor();
+  if(!anchor) return chart.timeScale().coordinateToTime(x);
+  const dur = barDurationSec();
+  const logical = chart.timeScale().coordinateToLogical(x);
+  if(logical == null) return null;
+  return anchor.time + (logical - anchor.logical)*dur;
+}
+function posToTP(pos){ return { time: drawXToTimeSafe(pos.x), price: drawYToPrice(pos.y) }; }
+
+/* ---- Hit-testing (¿el toque cae sobre un dibujo o una de sus asas?) ---- */
+function distToSegment(px,py,x1,y1,x2,y2){
+  const dx=x2-x1, dy=y2-y1;
+  const len2 = dx*dx+dy*dy;
+  let t = len2 ? ((px-x1)*dx+(py-y1)*dy)/len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  const cx=x1+t*dx, cy=y1+t*dy;
+  return Math.hypot(px-cx, py-cy);
+}
+function hitTestDrawings(x,y){
+  const list = getDrawings();
+  for(let i=list.length-1; i>=0; i--){
+    const d = list[i];
+    if(d.type==="trend" || d.type==="fib"){
+      const x1=drawTimeToX(d.p1.time), y1=drawPriceToY(d.p1.price), x2=drawTimeToX(d.p2.time), y2=drawPriceToY(d.p2.price);
+      if(x1==null||y1==null||x2==null||y2==null) continue;
+      if(distToSegment(x,y,x1,y1,x2,y2) < 12) return d;
+    } else if(d.type==="hline"){
+      const yy = drawPriceToY(d.p1.price);
+      if(yy!=null && Math.abs(y-yy) < 10) return d;
+    } else if(d.type==="rect" || d.type==="measure"){
+      const x1=drawTimeToX(d.p1.time), y1=drawPriceToY(d.p1.price), x2=drawTimeToX(d.p2.time), y2=drawPriceToY(d.p2.price);
+      if(x1==null||y1==null||x2==null||y2==null) continue;
+      const rx=Math.min(x1,x2), ry=Math.min(y1,y2), rw=Math.abs(x2-x1), rh=Math.abs(y2-y1);
+      if(x>=rx-8 && x<=rx+rw+8 && y>=ry-8 && y<=ry+rh+8) return d;
+    } else if(d.type==="long" || d.type==="short"){
+      const x1=drawTimeToX(d.p1.time), x2=drawTimeToX(d.p2.time);
+      if(x1==null||x2==null) continue;
+      const xLo=Math.min(x1,x2), xHi=Math.max(x1,x2);
+      const yTp=drawPriceToY(d.tp), ySl=drawPriceToY(d.sl);
+      if(yTp==null||ySl==null) continue;
+      const yTop=Math.min(yTp,ySl), yBot=Math.max(yTp,ySl);
+      if(x>=xLo-8 && x<=xHi+8 && y>=yTop-8 && y<=yBot+8) return d;
+    } else if(d.type==="brush"){
+      for(let k=0;k<d.points.length-1;k++){
+        const x1=drawTimeToX(d.points[k].time), y1=drawPriceToY(d.points[k].price);
+        const x2=drawTimeToX(d.points[k+1].time), y2=drawPriceToY(d.points[k+1].price);
+        if(x1==null||y1==null||x2==null||y2==null) continue;
+        if(distToSegment(x,y,x1,y1,x2,y2) < 12) return d;
+      }
+    }
+  }
+  return null;
+}
+function hitTestHandles(x,y){
+  for(const h of lastHandles){
+    if(Math.hypot(x-h.x, y-h.y) < 16) return h;
+  }
+  return null;
+}
+
+/* ---- Crear / finalizar dibujos ---- */
+function setDrawTool(tool){
+  drawState.tool = tool;
+  drawState.pendingPoint = null;
+  drawState.preview = null;
+  drawState.selectedId = null;
+  closeDrawEditPanel();
+  document.querySelectorAll("#drawToolbarFlyout .dt-btn[data-tool]").forEach(b=>{
+    b.classList.toggle("active", b.getAttribute("data-tool") === tool);
+  });
+  el("drawToolsBtn").classList.toggle("active", tool !== "cursor");
+  syncDrawShield();
+}
+function finishDrawing(d){
+  d.id = newDrawId();
+  getDrawings().push(d);
+  drawState.tool = "cursor";
+  drawState.pendingPoint = null;
+  drawState.preview = null;
+  drawState.selectedId = d.id;
+  document.querySelectorAll("#drawToolbarFlyout .dt-btn[data-tool]").forEach(b=>{
+    b.classList.toggle("active", b.getAttribute("data-tool") === "cursor");
+  });
+  el("drawToolsBtn").classList.remove("active");
+  el("drawToolbarFlyout").classList.remove("open");
+  saveAllDrawings();
+  syncDrawShield();
+}
+function handleDrawTap(pos){
+  const tool = drawState.tool;
+  const pt = posToTP(pos);
+  if(pt.time == null || pt.price == null) return;
+
+  if(tool === "hline"){
+    finishDrawing({ type:"hline", p1:{time:pt.time, price:pt.price}, color:DRAW_COLORS.hline });
+    return;
+  }
+  if(tool === "long" || tool === "short"){
+    const entry = pt.price;
+    const isLong = tool === "long";
+    const tp = isLong ? entry*1.02 : entry*0.98;
+    const sl = isLong ? entry*0.99 : entry*1.01;
+    const span = (chart.timeScale().getVisibleRange() || {from:pt.time-1800, to:pt.time+1800});
+    const dt = (span.to - span.from) * 0.18;
+    finishDrawing({
+      type: tool, p1:{time:pt.time, price:entry}, p2:{time:pt.time+dt, price:entry},
+      entry, tp, sl, color: DRAW_COLORS[tool]
+    });
+    return;
+  }
+  // Herramientas de 2 toques: línea de tendencia, fibonacci, rectángulo.
+  if(!drawState.pendingPoint){
+    drawState.pendingPoint = pt;
+    drawState.preview = { type:tool, p1:{time:pt.time, price:pt.price}, p2:{time:pt.time, price:pt.price}, color:DRAW_COLORS[tool] };
+    return;
+  }
+  const p1 = drawState.pendingPoint;
+  finishDrawing({ type:tool, p1:{time:p1.time, price:p1.price}, p2:{time:pt.time, price:pt.price}, color:DRAW_COLORS[tool] });
+}
+
+/* ---- Arrastre: mover el dibujo completo o redimensionarlo por sus asas ---- */
+function updateDrag(pos){
+  const d = findDrawing(dragInfo.id);
+  if(!d) return;
+  const t = drawXToTimeSafe(pos.x), price = drawYToPrice(pos.y);
+  if(t == null || price == null) return;
+  const key = dragInfo.key, orig = dragInfo.orig;
+  if(key === "p1"){ d.p1 = {time:t, price}; }
+  else if(key === "p2"){ d.p2 = {time:t, price}; }
+  else if(key === "tp"){ d.tp = price; }
+  else if(key === "sl"){ d.sl = price; }
+  else if(key === "width"){ d.p2 = {time:t, price:d.entry}; }
+  else if(key === "entryMove"){
+    const dPrice = price - orig.entry;
+    const dt = t - orig.p1.time;
+    d.entry = orig.entry + dPrice; d.tp = orig.tp + dPrice; d.sl = orig.sl + dPrice;
+    d.p1 = {time: orig.p1.time + dt, price: d.entry};
+    d.p2 = {time: orig.p2.time + dt, price: d.entry};
+  } else if(key === "move"){
+    const dt = t - dragInfo.startTime, dp = price - dragInfo.startPrice;
+    if(d.type === "hline"){ d.p1 = {time:orig.p1.time, price: orig.p1.price+dp}; }
+    else if(d.type==="trend" || d.type==="fib" || d.type==="rect" || d.type==="measure"){
+      d.p1 = {time: orig.p1.time+dt, price: orig.p1.price+dp};
+      d.p2 = {time: orig.p2.time+dt, price: orig.p2.price+dp};
+    } else if(d.type==="long" || d.type==="short"){
+      d.entry = orig.entry+dp; d.tp = orig.tp+dp; d.sl = orig.sl+dp;
+      d.p1 = {time: orig.p1.time+dt, price:d.entry};
+      d.p2 = {time: orig.p2.time+dt, price:d.entry};
+    } else if(d.type==="brush"){
+      d.points = orig.points.map(p=>({time:p.time+dt, price:p.price+dp}));
+    }
+  }
+}
+
+/* ---- Render de cada dibujo + registro de asas cuando está seleccionado ---- */
+function renderOneDrawing(ctx, d, rectWidth, isDraft, handlesOut){
+  const selected = !isDraft && d.id === drawState.selectedId;
+  const locked = !isDraft && !!d.locked;
+  const baseLW = d.lineWidth != null ? d.lineWidth : 1.6;
+  ctx.lineWidth = selected ? baseLW+0.7 : baseLW;
+  ctx.setLineDash(isDraft ? [6,4] : []);
+
+  function regHandle(key,x,y){
+    handlesOut.push({id:d.id, key, x, y});
+    if(!lastSelAnchor) lastSelAnchor = {x,y};
+    ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2);
+    ctx.fillStyle = "#07100f"; ctx.fill();
+    ctx.strokeStyle = "#F5B942"; ctx.lineWidth = 1.6; ctx.stroke();
+  }
+
+  if(d.type === "hline"){
+    const y = drawPriceToY(d.p1.price);
+    if(y == null) return;
+    const color = d.color || DRAW_COLORS.hline;
+    ctx.strokeStyle = color;
+    ctx.setLineDash([6,4]);
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(rectWidth,y); ctx.stroke();
+    ctx.setLineDash([]);
+    const label = fmtPrice(d.p1.price);
+    ctx.font = "700 10px 'JetBrains Mono', monospace";
+    const tw = ctx.measureText(label).width + 10;
+    ctx.fillStyle = color;
+    ctx.fillRect(6, y-9, tw, 16);
+    ctx.fillStyle = "#04211a"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillText(label, 11, y+1);
+    if(selected && !locked) regHandle("move", rectWidth/2, y);
+    return;
+  }
+
+  if(d.type === "trend" || d.type === "fib"){
+    const x1=drawTimeToX(d.p1.time), y1=drawPriceToY(d.p1.price), x2=drawTimeToX(d.p2.time), y2=drawPriceToY(d.p2.price);
+    if(x1==null||y1==null||x2==null||y2==null) return;
+    if(d.type === "fib"){
+      const xLo=Math.min(x1,x2), xHi=Math.max(x1,x2);
+      ctx.font = "9px 'JetBrains Mono', monospace"; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+      FIB_LEVELS.forEach((lv,i)=>{
+        const price = d.p1.price + (d.p2.price - d.p1.price)*lv;
+        const y = drawPriceToY(price);
+        if(y == null) return;
+        ctx.strokeStyle = FIB_COLORS[i]; ctx.lineWidth = 1; ctx.setLineDash([3,3]);
+        ctx.beginPath(); ctx.moveTo(xLo,y); ctx.lineTo(xHi,y); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = FIB_COLORS[i];
+        ctx.fillText(lv.toFixed(3)+" · "+fmtPrice(price), xLo+4, y-3);
+      });
+      ctx.lineWidth = selected ? baseLW+0.7 : baseLW;
+    }
+    ctx.strokeStyle = d.color || DRAW_COLORS[d.type];
+    ctx.setLineDash(isDraft ? [6,4] : []);
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    if(selected && !locked){ regHandle("p1",x1,y1); regHandle("p2",x2,y2); }
+    return;
+  }
+
+  if(d.type === "rect"){
+    const x1=drawTimeToX(d.p1.time), y1=drawPriceToY(d.p1.price), x2=drawTimeToX(d.p2.time), y2=drawPriceToY(d.p2.price);
+    if(x1==null||y1==null||x2==null||y2==null) return;
+    const rx=Math.min(x1,x2), ry=Math.min(y1,y2), rw=Math.abs(x2-x1), rh=Math.abs(y2-y1);
+    const bgOp = d.bgOpacity != null ? d.bgOpacity : 0.14;
+    ctx.fillStyle = hexA(d.bgColor || d.color || DRAW_COLORS.rect, bgOp);
+    ctx.fillRect(rx,ry,rw,rh);
+    ctx.strokeStyle = d.color || DRAW_COLORS.rect;
+    ctx.strokeRect(rx,ry,rw,rh);
+    if(selected && !locked){ regHandle("p1",x1,y1); regHandle("p2",x2,y2); }
+    return;
+  }
+
+  if(d.type === "measure"){
+    const x1=drawTimeToX(d.p1.time), y1=drawPriceToY(d.p1.price), x2=drawTimeToX(d.p2.time), y2=drawPriceToY(d.p2.price);
+    if(x1==null||y1==null||x2==null||y2==null) return;
+    const rx=Math.min(x1,x2), ry=Math.min(y1,y2), rw=Math.abs(x2-x1), rh=Math.abs(y2-y1);
+    const up = d.p2.price >= d.p1.price;
+    const color = up ? "#5FE3B8" : "#FF6B6B";
+    const bgOp = d.bgOpacity != null ? d.bgOpacity : 0.16;
+    ctx.fillStyle = hexA(color, bgOp);
+    ctx.fillRect(rx,ry,rw,rh);
+    ctx.setLineDash(isDraft ? [6,4] : [5,3]);
+    ctx.strokeStyle = color;
+    ctx.strokeRect(rx,ry,rw,rh);
+    ctx.setLineDash([]);
+
+    // Flechita vertical del punto 1 al punto 2, para marcar la dirección medida.
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x1,y2); ctx.stroke();
+
+    const priceDiff = d.p2.price - d.p1.price;
+    const pct = d.p1.price ? (priceDiff/d.p1.price)*100 : 0;
+    const dur = barDurationSec();
+    const bars = Math.max(1, Math.round(Math.abs(d.p2.time-d.p1.time)/dur) + 1);
+    const timeLabel = fmtDuration(Math.abs(d.p2.time-d.p1.time));
+    const sign = priceDiff >= 0 ? "+" : "";
+    const line1 = `${sign}${fmtPrice(priceDiff)}  (${sign}${pct.toFixed(2)}%)`;
+    const line2 = `${timeLabel} · ${bars} vela${bars===1?"":"s"}`;
+
+    ctx.font = "700 11px 'JetBrains Mono', monospace";
+    const w1 = ctx.measureText(line1).width;
+    ctx.font = "600 10px 'JetBrains Mono', monospace";
+    const w2 = ctx.measureText(line2).width;
+    const boxW = Math.max(w1,w2) + 16;
+    const boxH = 36;
+    let boxX = rx + rw/2 - boxW/2;
+    let boxY = ry - boxH - 6;
+    if(boxY < 4) boxY = ry + 6; // si no cabe arriba, se pone dentro del recuadro
+    ctx.fillStyle = "rgba(7,16,15,0.92)";
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+    ctx.strokeStyle = hexA(color, 0.5);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(boxX, boxY, boxW, boxH);
+    ctx.textAlign = "center";
+    ctx.font = "700 11px 'JetBrains Mono', monospace";
+    ctx.fillStyle = color;
+    ctx.fillText(line1, boxX+boxW/2, boxY+15);
+    ctx.font = "600 10px 'JetBrains Mono', monospace";
+    ctx.fillStyle = "#DCEAE6";
+    ctx.fillText(line2, boxX+boxW/2, boxY+29);
+    ctx.textAlign = "left";
+
+    if(selected && !locked){ regHandle("p1",x1,y1); regHandle("p2",x2,y2); }
+    return;
+  }
+
+  if(d.type === "long" || d.type === "short"){
+    const isLong = d.type === "long";
+    const x1=drawTimeToX(d.p1.time), x2=drawTimeToX(d.p2.time);
+    if(x1==null||x2==null) return;
+    const xLo=Math.min(x1,x2), xHi=Math.max(x1,x2);
+    const yEntry=drawPriceToY(d.entry), yTp=drawPriceToY(d.tp), ySl=drawPriceToY(d.sl);
+    if(yEntry==null||yTp==null||ySl==null) return;
+    const bgOp = d.bgOpacity != null ? d.bgOpacity : 0.22;
+    const winColor = "#5FE3B8", loseColor = "#FF6B6B";
+    ctx.fillStyle = isLong ? hexA(winColor,bgOp) : hexA(loseColor,bgOp);
+    ctx.fillRect(xLo, Math.min(yEntry,yTp), xHi-xLo, Math.abs(yEntry-yTp));
+    ctx.fillStyle = isLong ? hexA(loseColor,bgOp) : hexA(winColor,bgOp);
+    ctx.fillRect(xLo, Math.min(yEntry,ySl), xHi-xLo, Math.abs(yEntry-ySl));
+    ctx.setLineDash([5,3]); ctx.strokeStyle = "#DCEAE6"; ctx.lineWidth = baseLW;
+    ctx.beginPath(); ctx.moveTo(xLo,yEntry); ctx.lineTo(xHi,yEntry); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = winColor; ctx.beginPath(); ctx.moveTo(xLo,yTp); ctx.lineTo(xHi,yTp); ctx.stroke();
+    ctx.strokeStyle = loseColor; ctx.beginPath(); ctx.moveTo(xLo,ySl); ctx.lineTo(xHi,ySl); ctx.stroke();
+    const rr = Math.abs(d.tp-d.entry) / (Math.abs(d.entry-d.sl) || 1e-9);
+    ctx.font = "700 10px 'JetBrains Mono', monospace"; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = winColor;
+    ctx.fillText("TP "+fmtPrice(d.tp)+"  +"+Math.abs((d.tp-d.entry)/d.entry*100).toFixed(2)+"%", xLo+4, yTp-4);
+    ctx.fillStyle = loseColor;
+    ctx.fillText("SL "+fmtPrice(d.sl)+"  -"+Math.abs((d.entry-d.sl)/d.entry*100).toFixed(2)+"%", xLo+4, ySl+13);
+    ctx.fillStyle = "#DCEAE6";
+    ctx.fillText((isLong?"LARGO":"CORTO")+" "+fmtPrice(d.entry)+"  R:R 1:"+rr.toFixed(2), xLo+4, yEntry-4);
+    if(selected && !locked){
+      regHandle("tp", xHi, yTp);
+      regHandle("sl", xHi, ySl);
+      regHandle("width", xHi, yEntry);
+      regHandle("entryMove", xLo, yEntry);
+    }
+    return;
+  }
+
+  if(d.type === "brush"){
+    if(!d.points || d.points.length < 2) return;
+    ctx.strokeStyle = d.color || DRAW_COLORS.brush;
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.beginPath();
+    let started = false;
+    d.points.forEach(p=>{
+      const x = drawTimeToX(p.time), y = drawPriceToY(p.price);
+      if(x==null||y==null) return;
+      if(!started){ ctx.moveTo(x,y); started = true; } else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+    if(selected && !locked){
+      const mid = d.points[Math.floor(d.points.length/2)];
+      const mx = drawTimeToX(mid.time), my = drawPriceToY(mid.price);
+      if(mx!=null && my!=null) regHandle("move", mx, my);
+    }
+  }
+}
+
+/* ---- Cuenta atrás hasta el cierre de la vela actual (como en Hyperliquid) ----
+   Se dibuja como una pequeña placa justo debajo de la etiqueta de precio nativa,
+   dentro del propio eje de precios (derecha del gráfico), y se recalcula cada frame. */
+function fmtCountdown(sec){
+  sec = Math.max(0, Math.floor(sec));
+  const h = Math.floor(sec/3600);
+  const m = Math.floor((sec%3600)/60);
+  const s = sec%60;
+  if(h > 0) return `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  return `${m}:${String(s).padStart(2,"0")}`;
+}
+function roundRectPath(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+function renderCandleCountdown(ctx, rect){
+  if(!state.lastCandle || !state.autoRefresh) return;
+  const dur = barDurationSec();
+  if(!dur) return;
+  const nextClose = state.lastCandle.time + dur;
+  const remaining = nextClose - Date.now()/1000;
+  if(remaining <= 0 || remaining > dur) return; // fuera de rango: evita parpadeos si la vela ya cerró y aún no llegó la siguiente
+  const y = drawPriceToY(state.lastCandle.close);
+  if(y == null) return;
+  let priceScaleW = 60;
+  try{ priceScaleW = chart.priceScale("right").width() || 60; }catch(err){}
+  if(priceScaleW < 24) return; // eje de precios oculto/colapsado
+
+  const label = fmtCountdown(remaining);
+  ctx.font = "700 10px 'JetBrains Mono', monospace";
+  const tw = ctx.measureText(label).width;
+  const badgeW = Math.min(priceScaleW - 6, tw + 12);
+  const badgeH = 15;
+  const badgeX = rect.width - priceScaleW + (priceScaleW - badgeW)/2;
+  const badgeY = y + 11;
+
+  roundRectPath(ctx, badgeX, badgeY, badgeW, badgeH, 3);
+  ctx.fillStyle = "rgba(7,16,15,0.94)";
+  ctx.fill();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = remaining <= 10 ? "rgba(255,107,107,0.55)" : "rgba(151,252,228,0.3)";
+  ctx.stroke();
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = remaining <= 10 ? "#FF6B6B" : "#97FCE4";
+  ctx.fillText(label, badgeX + badgeW/2, badgeY + badgeH/2 + 0.5);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+}
+
+function redrawDrawings(){
+  syncDrawShield();
+  const rect = chartContainer.getBoundingClientRect();
+  drawCtx.clearRect(0,0,rect.width,rect.height);
+  renderCandleCountdown(drawCtx, rect);
+  lastHandles = [];
+  lastSelAnchor = null;
+  const handlesOut = [];
+  getDrawings().forEach(d => renderOneDrawing(drawCtx, d, rect.width, false, handlesOut));
+  if(drawState.preview) renderOneDrawing(drawCtx, drawState.preview, rect.width, true, handlesOut);
+  lastHandles = handlesOut;
+
+  const selToolbar = el("drawSelToolbar");
+  const selDrawing = drawState.selectedId ? findDrawing(drawState.selectedId) : null;
+  if(selDrawing){
+    let anchor = lastSelAnchor;
+    if(!anchor){
+      // Dibujo bloqueado (sin asas): igual anclamos la barra de selección a un punto visible.
+      if(selDrawing.type === "hline"){ const y=drawPriceToY(selDrawing.p1.price); if(y!=null) anchor={x:rect.width/2,y}; }
+      else if(selDrawing.p1){ const x=drawTimeToX(selDrawing.p1.time), y=drawPriceToY(selDrawing.p1.price); if(x!=null&&y!=null) anchor={x,y}; }
+      else if(selDrawing.points && selDrawing.points.length){ const mid=selDrawing.points[Math.floor(selDrawing.points.length/2)]; const x=drawTimeToX(mid.time), y=drawPriceToY(mid.price); if(x!=null&&y!=null) anchor={x,y}; }
+    }
+    if(anchor){
+      selToolbar.classList.add("show");
+      selToolbar.style.left = anchor.x+"px";
+      selToolbar.style.top = Math.max(14, anchor.y-6)+"px";
+      const lockBtn = el("drawLockBtn");
+      lockBtn.textContent = selDrawing.locked ? "🔒" : "🔓";
+      lockBtn.classList.toggle("lock-on", !!selDrawing.locked);
+      el("drawDelBtn").classList.toggle("locked", !!selDrawing.locked);
+      if(editPanelOpenId && editPanelOpenId !== selDrawing.id) closeDrawEditPanel();
+    } else {
+      selToolbar.classList.remove("show");
+    }
+  } else {
+    selToolbar.classList.remove("show");
+    if(editPanelOpenId) closeDrawEditPanel();
+  }
+}
+
+(function drawLoop(){
+  redrawDrawings();
+  requestAnimationFrame(drawLoop);
+})();
+
+/* ---- Interacción con el gráfico (usa chartWrapEl / syncDrawShield definidos más arriba) ---- */
+function takeOverPointer(e){
+  ownedPointerIds.add(e.pointerId);
+  try{ chartWrapEl.setPointerCapture(e.pointerId); }catch(err){}
+}
+function releasePointer(e){
+  ownedPointerIds.delete(e.pointerId);
+  try{ chartWrapEl.releasePointerCapture(e.pointerId); }catch(err){}
+}
+function getChartPos(e){
+  const rect = chartContainer.getBoundingClientRect();
+  return { x: e.clientX-rect.left, y: e.clientY-rect.top };
+}
+
+chartWrapEl.addEventListener("pointerdown", (e)=>{
+  if(!e.isPrimary || (e.pointerType==="mouse" && e.button!==0)) return;
+  // Si el toque cayó sobre nuestra propia interfaz flotante (la barra de selección,
+  // el panel de edición o el menú de herramientas) hay que dejarlo pasar tal cual:
+  // si lo interceptamos aquí, el botón de abajo (editar/bloquear/eliminar/herramienta)
+  // nunca llega a recibir su propio evento "click" y queda inutilizado.
+  if(e.target.closest("#drawSelToolbar, #drawEditPanel, #drawToolbarFlyout")) return;
+  const pos = getChartPos(e);
+
+  if(drawState.tool === "brush"){
+    e.preventDefault(); e.stopPropagation();
+    takeOverPointer(e);
+    const pt = posToTP(pos);
+    drawState.brushPts = [pt];
+    drawState.preview = { type:"brush", points:drawState.brushPts, color:DRAW_COLORS.brush };
+    drawState.brushDrawing = true;
+    syncDrawShield();
+    return;
+  }
+  if(drawState.tool && drawState.tool !== "cursor"){
+    e.preventDefault(); e.stopPropagation();
+    handleDrawTap(pos);
+    syncDrawShield();
+    return;
+  }
+  // Modo cursor: seleccionar / arrastrar / redimensionar dibujos existentes.
+  if(drawState.selectedId){
+    const sel = findDrawing(drawState.selectedId);
+    if(sel && !sel.locked){
+      const h = hitTestHandles(pos.x,pos.y);
+      if(h && h.id === drawState.selectedId){
+        e.preventDefault(); e.stopPropagation();
+        takeOverPointer(e);
+        const tp = posToTP(pos);
+        dragInfo = { id:h.id, key:h.key, startTime:tp.time, startPrice:tp.price, orig:JSON.parse(JSON.stringify(sel)) };
+        syncDrawShield();
+        return;
+      }
+      if(hitTestDrawings(pos.x,pos.y) === sel){
+        e.preventDefault(); e.stopPropagation();
+        takeOverPointer(e);
+        const tp = posToTP(pos);
+        dragInfo = { id:sel.id, key:"move", startTime:tp.time, startPrice:tp.price, orig:JSON.parse(JSON.stringify(sel)) };
+        syncDrawShield();
+        return;
+      }
+    }
+    const other = hitTestDrawings(pos.x,pos.y);
+    if(other){
+      e.preventDefault(); e.stopPropagation();
+      drawState.selectedId = other.id;
+      closeDrawEditPanel();
+      syncDrawShield();
+      return;
+    }
+    drawState.selectedId = null;
+    closeDrawEditPanel();
+    syncDrawShield();
+    return; // deja pasar (sin stopPropagation): permite pan nativo en el mismo gesto
+  } else {
+    const hit = hitTestDrawings(pos.x,pos.y);
+    if(hit){
+      e.preventDefault(); e.stopPropagation();
+      drawState.selectedId = hit.id;
+      syncDrawShield();
+      return;
+    }
+    // nada bajo el dedo: no interferimos, el gráfico maneja pan/zoom/crosshair como siempre
+  }
+}, {capture:true});
+
+chartWrapEl.addEventListener("pointermove", (e)=>{
+  const pos = getChartPos(e);
+  if(drawState.brushDrawing && ownedPointerIds.has(e.pointerId)){
+    const pt = posToTP(pos);
+    if(pt.time!=null && pt.price!=null) drawState.brushPts.push(pt);
+    return;
+  }
+  if(dragInfo && ownedPointerIds.has(e.pointerId)){
+    updateDrag(pos);
+    return;
+  }
+  if(drawState.tool && drawState.tool!=="cursor" && drawState.tool!=="brush" && drawState.pendingPoint){
+    const pt = posToTP(pos);
+    if(pt.time!=null && pt.price!=null) drawState.preview.p2 = pt;
+  }
+});
+function endChartPointer(e){
+  if(drawState.brushDrawing && ownedPointerIds.has(e.pointerId)){
+    drawState.brushDrawing = false;
+    releasePointer(e);
+    if(drawState.brushPts && drawState.brushPts.length > 1){
+      finishDrawing({ type:"brush", points:drawState.brushPts, color:DRAW_COLORS.brush });
+    } else {
+      drawState.preview = null;
+    }
+    drawState.brushPts = null;
+    syncDrawShield();
+    return;
+  }
+  if(dragInfo && ownedPointerIds.has(e.pointerId)){
+    dragInfo = null;
+    releasePointer(e);
+    saveAllDrawings();
+    syncDrawShield();
+    return;
+  }
+  ownedPointerIds.delete(e.pointerId);
+}
+chartWrapEl.addEventListener("pointerup", endChartPointer);
+chartWrapEl.addEventListener("pointercancel", endChartPointer);
+
+/* ---- Botón único "✎ Dibujo" + menú desplegable de herramientas ---- */
+el("drawToolsBtn").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  const flyout = el("drawToolbarFlyout");
+  const willOpen = !flyout.classList.contains("open");
+  document.querySelectorAll(".liq-panel.open").forEach(p=>p.classList.remove("open"));
+  flyout.classList.toggle("open", willOpen);
+});
+document.querySelectorAll("#drawToolbarFlyout .dt-btn[data-tool]").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    const tool = btn.getAttribute("data-tool");
+    setDrawTool(tool);
+    if(tool !== "cursor") el("drawToolbarFlyout").classList.remove("open");
+  });
+});
+el("btnClearDrawings").addEventListener("click", ()=>{
+  if(!getDrawings().length) return;
+  if(!confirm("¿Borrar todos los dibujos de este gráfico?")) return;
+  allDrawings[drawingsKeyForChart()] = [];
+  drawState.selectedId = null;
+  saveAllDrawings();
+  el("drawToolbarFlyout").classList.remove("open");
+});
+document.addEventListener("click", (e)=>{
+  if(e.target.closest("#drawToolbarFlyout") || e.target.closest("#drawToolsBtn")) return;
+  el("drawToolbarFlyout").classList.remove("open");
+});
+
+/* ---- Barra flotante de selección: editar estilo / bloquear / eliminar ---- */
+el("drawDelBtn").addEventListener("click", ()=>{
+  if(!drawState.selectedId) return;
+  const d = findDrawing(drawState.selectedId);
+  if(d && d.locked) return;
+  allDrawings[drawingsKeyForChart()] = getDrawings().filter(dd => dd.id !== drawState.selectedId);
+  drawState.selectedId = null;
+  saveAllDrawings();
+  syncDrawShield();
+});
+el("drawLockBtn").addEventListener("click", ()=>{
+  if(!drawState.selectedId) return;
+  const d = findDrawing(drawState.selectedId);
+  if(!d) return;
+  d.locked = !d.locked;
+  saveAllDrawings();
+});
+
+const drawEditPanelEl = el("drawEditPanel");
+function positionDrawEditPanel(){
+  if(!lastSelAnchor) return;
+  const rect = chartContainer.getBoundingClientRect();
+  let left = lastSelAnchor.x - 110;
+  left = Math.max(8, Math.min(left, rect.width-220-8));
+  let top = lastSelAnchor.y + 22;
+  drawEditPanelEl.style.left = left+"px";
+  drawEditPanelEl.style.top = top+"px";
+}
+function openDrawEditPanel(){
+  const d = findDrawing(drawState.selectedId);
+  if(!d) return;
+  editPanelOpenId = d.id;
+  const showColor = ["trend","hline","rect","brush"].includes(d.type);
+  const showBg = d.type==="rect" || d.type==="long" || d.type==="short" || d.type==="measure";
+  const showBgColor = d.type==="rect";
+  const showWidth = d.type!=="fib" && d.type!=="measure";
+  const showHint = d.type==="fib" || d.type==="long" || d.type==="short" || d.type==="measure";
+  el("deColorRow").style.display = showColor?"block":"none";
+  el("deWidthRow").style.display = showWidth?"block":"none";
+  el("deBgColorRow").style.display = showBgColor?"block":"none";
+  el("deBgOpacityRow").style.display = showBg?"block":"none";
+  el("deHint").style.display = showHint?"block":"none";
+  if(showColor) el("deColor").value = d.color || DRAW_COLORS[d.type] || "#97FCE4";
+  if(showWidth){
+    const w = d.lineWidth!=null ? d.lineWidth : 1.6;
+    el("deWidth").value = w;
+    el("deWidthVal").textContent = w.toFixed(1);
+  }
+  if(showBgColor) el("deBgColor").value = d.bgColor || d.color || DRAW_COLORS[d.type] || "#7C9BFF";
+  if(showBg){
+    const op = d.bgOpacity != null ? d.bgOpacity : (d.type==="rect" ? 0.14 : d.type==="measure" ? 0.16 : 0.22);
+    el("deBgOpacity").value = Math.round(op*100);
+    el("deBgOpacityVal").textContent = op.toFixed(2);
+  }
+  positionDrawEditPanel();
+  drawEditPanelEl.classList.add("open");
+}
+function closeDrawEditPanel(){
+  editPanelOpenId = null;
+  drawEditPanelEl.classList.remove("open");
+}
+el("drawEditToolBtn").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  if(drawEditPanelEl.classList.contains("open")) closeDrawEditPanel();
+  else openDrawEditPanel();
+});
+el("deColor").addEventListener("input", (e)=>{
+  const d = findDrawing(editPanelOpenId); if(!d) return;
+  d.color = e.target.value; saveAllDrawings();
+});
+el("deWidth").addEventListener("input", (e)=>{
+  const d = findDrawing(editPanelOpenId); if(!d) return;
+  const w = parseFloat(e.target.value);
+  d.lineWidth = w; el("deWidthVal").textContent = w.toFixed(1);
+  saveAllDrawings();
+});
+el("deBgColor").addEventListener("input", (e)=>{
+  const d = findDrawing(editPanelOpenId); if(!d) return;
+  d.bgColor = e.target.value; saveAllDrawings();
+});
+el("deBgOpacity").addEventListener("input", (e)=>{
+  const d = findDrawing(editPanelOpenId); if(!d) return;
+  const op = parseInt(e.target.value,10)/100;
+  d.bgOpacity = op; el("deBgOpacityVal").textContent = op.toFixed(2);
+  saveAllDrawings();
+});
+document.addEventListener("click", (e)=>{
+  if(!drawEditPanelEl.classList.contains("open")) return;
+  if(e.target.closest("#drawEditPanel") || e.target.closest("#drawEditToolBtn")) return;
+  closeDrawEditPanel();
+});
+
+/* ============================= ZONAS DE LIQUIDACIÓN (mapa de liquidez) =============================
+   Modelo estimado a partir de las velas cargadas: para cada vela, reparte su volumen entre
+   varios niveles de apalancamiento y calcula a qué precio se liquidaría una posición larga/corta
+   abierta en esa vela. Acumula esa "masa" en buckets de precio y las dibuja como bandas de calor
+   detrás de las velas. No son posiciones reales (Hyperliquid no expone eso públicamente), es una
+   aproximación visual, igual que en el archivo de referencia. */
+const LEVERAGE_TIERS = [
+  {lev:10,  color:"#3b82f6", share:.35},
+  {lev:25,  color:"#00e5a0", share:.30},
+  {lev:50,  color:"#f5a623", share:.20},
+  {lev:100, color:"#ff7a1a", share:.15},
+];
+const LIQ_SCALE = 0.002;
+
+function hexToRgb(hex){
+  const h = hex.replace("#","");
+  const n = parseInt(h.length===3 ? h.split("").map(c=>c+c).join("") : h, 16);
+  return [(n>>16)&255, (n>>8)&255, n&255];
+}
+function intensityColor(frac, alpha){
+  frac = Math.max(0, Math.min(1, frac));
+  const QUANT_STEPS = 7;
+  frac = Math.round(frac*QUANT_STEPS)/QUANT_STEPS;
+  const colors = [[0,[40,20,70]],[0.3,[19,180,160]],[0.6,[245,230,35]],[1,[255,80,80]]];
+  let c0 = colors[0], c1 = colors[colors.length-1];
+  for(let i=0;i<colors.length-1;i++){
+    if(frac>=colors[i][0] && frac<=colors[i+1][0]){ c0=colors[i]; c1=colors[i+1]; break; }
+  }
+  const t = (frac-c0[0])/(c1[0]-c0[0]||1);
+  const r = Math.round(c0[1][0]+(c1[1][0]-c0[1][0])*t);
+  const g = Math.round(c0[1][1]+(c1[1][1]-c0[1][1])*t);
+  const bl = Math.round(c0[1][2]+(c1[1][2]-c0[1][2])*t);
+  return `rgba(${r},${g},${bl},${alpha==null?1:alpha})`;
+}
+function contrastFrac(frac, exp){ frac = Math.max(0,Math.min(1,frac)); return Math.pow(frac, exp==null?1.6:exp); }
+
+function toLiqCandles(arr){
+  return arr.map(c=>({ t: c.time*1000, high:c.high, low:c.low, close:c.close, volume:c.volume }));
+}
+
+function buildLiquidityModel(cds, numBuckets, activeLevs){
+  activeLevs = activeLevs && activeLevs.length ? activeLevs : [10,25,50,100];
+  const activeTiers = LEVERAGE_TIERS.filter(t=>activeLevs.includes(t.lev));
+  if(!activeTiers.length || !cds.length) return null;
+  const lastClose = cds[cds.length-1].close;
+  const lows = cds.map(c=>c.low), highs = cds.map(c=>c.high);
+  const minLowLev = lastClose*(1-1/LEVERAGE_TIERS[0].lev*1.6);
+  const maxHighLev = lastClose*(1+1/LEVERAGE_TIERS[0].lev*1.6);
+  const lo = Math.min(Math.min(...lows), minLowLev);
+  const hi = Math.max(Math.max(...highs), maxHighLev);
+  const N = numBuckets || 130;
+  const step = (hi-lo)/N;
+  if(!(step>0)) return null;
+  const buckets = Array.from({length:N},(_,i)=>({
+    lo: lo+i*step, hi: lo+(i+1)*step, mid: lo+(i+0.5)*step,
+    longTotal:0, shortTotal:0, total:0, firstTime:null, contributions:[]
+  }));
+  function bucketIndex(p){
+    if(!(p>lo) || !(p<hi)) return -1;
+    let idx = Math.floor((p-lo)/step);
+    if(idx<0) idx=0; if(idx>=N) idx=N-1;
+    return idx;
+  }
+  cds.forEach(c=>{
+    const notional = c.volume*c.close;
+    const range = c.high - c.low;
+    const subSteps = Math.min(40, Math.max(1, Math.round(range/step*2)));
+    activeTiers.forEach(tier=>{
+      for(let s=0; s<=subSteps; s++){
+        const t = s/Math.max(1,subSteps);
+        const entryPrice = c.low + t*range;
+        const longLiq = entryPrice*(1-1/tier.lev);
+        const shortLiq = entryPrice*(1+1/tier.lev);
+        const amt = (notional*tier.share*0.5*LIQ_SCALE)/(subSteps+1);
+        let bi = bucketIndex(longLiq);
+        if(bi>=0){
+          const b = buckets[bi];
+          b.longTotal += amt; b.total += amt;
+          if(b.firstTime==null) b.firstTime = c.t;
+          b.contributions.push({time:c.t, amt});
+        }
+        bi = bucketIndex(shortLiq);
+        if(bi>=0){
+          const b = buckets[bi];
+          b.shortTotal += amt; b.total += amt;
+          if(b.firstTime==null) b.firstTime = c.t;
+          b.contributions.push({time:c.t, amt});
+        }
+      }
+    });
+  });
+  const maxIntensity = Math.max(1, ...buckets.map(b=>b.total));
+  return {buckets, maxIntensity, lo, hi, step, lastClose};
+}
+function computeSweepEvents(buckets, cds){
+  const result = new Map();
+  const wasInside = new Array(buckets.length).fill(false);
+  for(let ci=1; ci<cds.length; ci++){
+    const prevClose = cds[ci-1].close;
+    const candle = cds[ci];
+    const lo = Math.min(candle.low, prevClose), hi = Math.max(candle.high, prevClose);
+    buckets.forEach((b,bi)=>{
+      if(b.total<=0) return;
+      if(b.firstTime==null || candle.t<=b.firstTime){ wasInside[bi]=false; return; }
+      const inside = (b.mid>=lo && b.mid<=hi);
+      if(inside && !wasInside[bi]){
+        if(!result.has(bi)) result.set(bi, []);
+        result.get(bi).push(candle.t);
+      }
+      wasInside[bi] = inside;
+    });
+  }
+  return result;
+}
+function sumContribInWindow(b, fromExclusive, toInclusive){
+  let s = 0;
+  for(const c of b.contributions){ if(c.time>fromExclusive && c.time<=toInclusive) s += c.amt; }
+  return s;
+}
+function buildBucketSegments(b, sweepTimes, nowMs){
+  const bounds = [b.firstTime, ...(sweepTimes||[]), nowMs];
+  const segments = [];
+  for(let k=0; k<bounds.length-1; k++){
+    const segTo = bounds[k+1];
+    if(segTo<=bounds[k] && k>0) continue;
+    const segFromForSum = k===0 ? -Infinity : bounds[k];
+    const amt = sumContribInWindow(b, segFromForSum, segTo);
+    segments.push({ from: k===0 ? b.firstTime : bounds[k], to: segTo, amt, isActive: k===bounds.length-2 });
+  }
+  return segments;
+}
+
+function rebuildLiquidityModel(){
+  const cds = toLiqCandles(state.mainCandles || []);
+  const model = (state.liqOn && cds.length>5)
+    ? buildLiquidityModel(cds, 130, state.liqLevs)
+    : null;
+  if(model){
+    const sweepMap = computeSweepEvents(model.buckets, cds);
+    const lastTimeMs = cds[cds.length-1].t;
+    model.lastTimeMs = lastTimeMs;
+    model.active = model.buckets.map((b,bi)=>{
+      if(b.total<=0) return {total:0, from:null, lastSweepTime:null, segments:[]};
+      const sweeps = sweepMap.get(bi) || [];
+      const lastSweepTime = sweeps.length ? sweeps[sweeps.length-1] : null;
+      const total = sumContribInWindow(b, lastSweepTime!=null ? lastSweepTime : -Infinity, lastTimeMs);
+      const segments = buildBucketSegments(b, sweeps, lastTimeMs);
+      return {total, from: lastSweepTime!=null ? lastSweepTime : b.firstTime, lastSweepTime, segments};
+    });
+  }
+  state.liqModel = model;
+  drawLiquidityOverlay();
+}
+
+const liqCanvas = el("liqCanvas");
+const liqCtx = liqCanvas.getContext("2d");
+function resizeLiqCanvas(){
+  const rect = chartContainer.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  liqCanvas.width = Math.max(1, Math.round(rect.width*dpr));
+  liqCanvas.height = Math.max(1, Math.round(rect.height*dpr));
+  liqCanvas.style.width = rect.width+"px";
+  liqCanvas.style.height = rect.height+"px";
+  liqCtx.setTransform(dpr,0,0,dpr,0,0);
+}
+
+function drawLiquidityOverlay(){
+  const rect = chartContainer.getBoundingClientRect();
+  liqCtx.clearRect(0, 0, rect.width, rect.height);
+  const model = state.liqModel;
+  if(!state.liqOn || !model || !model.active) return;
+
+  const thresholdFrac = state.liqThreshold;
+  const lastTimeMs = model.lastTimeMs;
+  const intervalMs = INTERVAL_MS[state.interval] || 60000;
+  const fadeWindow = intervalMs*15;
+  const priceScaleW = chart.priceScale("right").width();
+  const rightEdgeX = Math.max(0, rect.width - priceScaleW);
+  const ts = chart.timeScale();
+
+  function timeToX(tMs){
+    const x = ts.timeToCoordinate(Math.floor(tMs/1000));
+    return x == null ? 0 : x;
+  }
+  function priceToY(p){
+    return candleSeries.priceToCoordinate(p);
+  }
+
+  liqCtx.save();
+  liqCtx.beginPath(); liqCtx.rect(0, 0, rightEdgeX, rect.height); liqCtx.clip();
+
+  model.buckets.forEach((b,bi)=>{
+    const act = model.active[bi];
+    if(!act || !act.segments || !act.segments.length) return;
+    const yTop = priceToY(b.hi), yBot = priceToY(b.lo);
+    if(yTop==null || yBot==null) return;
+    act.segments.forEach(seg=>{
+      const frac = seg.amt/model.maxIntensity;
+      if(frac<=0) return;
+      const segThreshold = seg.isActive ? thresholdFrac : thresholdFrac*0.5;
+      if(frac<segThreshold) return;
+      const x0 = Math.max(0, timeToX(seg.from));
+      const x1 = seg.isActive ? rightEdgeX : Math.min(rightEdgeX, timeToX(seg.to));
+      if(x1<=x0) return;
+      const cFrac = contrastFrac(frac);
+      const alpha = seg.isActive ? (0.05+cFrac*0.55) : (0.03+cFrac*0.20);
+      liqCtx.fillStyle = intensityColor(frac, alpha);
+      liqCtx.fillRect(x0, Math.min(yTop,yBot), x1-x0, Math.max(1, Math.abs(yBot-yTop)));
+      if(!seg.isActive){
+        liqCtx.fillStyle = intensityColor(frac, Math.min(0.5, 0.15+cFrac*0.35));
+        liqCtx.fillRect(x1-1, Math.min(yTop,yBot), 1.5, Math.max(1, Math.abs(yBot-yTop)));
+      }
+    });
+  });
+
+  if(state.liqSweepOn){
+    const [sr,sg,sb] = hexToRgb(state.liqSweepColor || "#ffffff");
+    const r = Math.max(3, Math.min(10, state.liqSweepSize || 5));
+    model.buckets.forEach((b,bi)=>{
+      const act = model.active[bi];
+      if(!act || act.lastSweepTime==null) return;
+      const age = lastTimeMs - act.lastSweepTime;
+      if(age<0 || age>=fadeWindow) return;
+      const fadeAlpha = 1-(age/fadeWindow);
+      const x = timeToX(act.lastSweepTime), y = priceToY(b.mid);
+      if(y==null) return;
+      liqCtx.beginPath(); liqCtx.arc(x,y,r,0,Math.PI*2);
+      liqCtx.fillStyle = `rgba(${sr},${sg},${sb},${0.92*fadeAlpha})`; liqCtx.fill();
+      liqCtx.strokeStyle = `rgba(${sr},${sg},${sb},${fadeAlpha})`; liqCtx.lineWidth = 1.4; liqCtx.stroke();
+      liqCtx.font = "bold "+Math.round(r*1.6)+"px sans-serif";
+      liqCtx.fillStyle = `rgba(10,10,15,${fadeAlpha})`;
+      liqCtx.textAlign = "center"; liqCtx.textBaseline = "middle";
+      liqCtx.fillText("×", x, y+0.5);
+    });
+  }
+  liqCtx.restore();
+}
+
+chart.timeScale().subscribeVisibleLogicalRangeChange(()=> drawLiquidityOverlay());
+resizeLiqCanvas();
+
+/* ============================= REGRESSION MATH ============================= */
+function colorForSlope(slope, tier){
+  const up = slope >= 0;
+  if(tier === "bright") return up ? "#5FE3B8" : "#FF6B6B";
+  if(tier === "dim")    return up ? "#3f7a68" : "#8a4a4a";
+  return up ? "#2b4a42" : "#5c3636"; // "faint" — canal más antiguo
+}
+function linreg(values){
+  const n = values.length;
+  let sx=0, sy=0, sxy=0, sxx=0;
+  for(let i=0;i<n;i++){ sx+=i; sy+=values[i]; sxy+=i*values[i]; sxx+=i*i; }
+  const denom = (n*sxx - sx*sx) || 1e-9;
+  const slope = (n*sxy - sx*sy)/denom;
+  const intercept = (sy - slope*sx)/n;
+  return {slope, intercept};
+}
+// R²: qué tan bien la recta explica el movimiento real del precio (0 = nada, 1 = perfecto)
+function computeR2(candles, slope, intercept){
+  const closes = candles.map(c=>c.close);
+  const meanY = closes.reduce((a,b)=>a+b,0)/closes.length;
+  let ssRes=0, ssTot=0;
+  candles.forEach((c,i)=>{
+    const reg = slope*i+intercept;
+    ssRes += (c.close-reg)*(c.close-reg);
+    ssTot += (c.close-meanY)*(c.close-meanY);
+  });
+  return ssTot > 0 ? Math.max(0, 1-ssRes/ssTot) : 0;
+}
+function residualStdDev(candles, slope, intercept){
+  let sumSq = 0;
+  candles.forEach((c,i)=>{
+    const reg = slope*i+intercept;
+    const res = c.close-reg;
+    sumSq += res*res;
+  });
+  return Math.sqrt(sumSq/candles.length);
+}
+// Tamaño de bloque automático: activos más volátiles (ATR% alto) rotan de tendencia más rápido,
+// así que se les asigna un bloque más corto; activos tranquilos usan bloques más largos.
+// Se suaviza contra el valor anterior para que no salte bruscamente de una actualización a otra.
+let lastAutoBlockSize = null;
+function computeAutoBlockSize(candles){
+  const sample = candles.slice(-60);
+  if(sample.length < 10) return lastAutoBlockSize || 42;
+  let atrSum = 0, n = 0;
+  for(let i=1;i<sample.length;i++){
+    const c = sample[i], p = sample[i-1];
+    const tr = Math.max(c.high-c.low, Math.abs(c.high-p.close), Math.abs(c.low-p.close));
+    atrSum += tr; n++;
+  }
+  const atr = atrSum/n;
+  const atrPct = atr/sample[sample.length-1].close;
+  let size = Math.round(42*(0.005/Math.max(0.0006, atrPct)));
+  size = Math.max(20, Math.min(80, size));
+  size = lastAutoBlockSize != null ? Math.round(lastAutoBlockSize*0.7 + size*0.3) : size;
+  lastAutoBlockSize = size;
+  return size;
+}
+function computeChannel(candles, opts){
+  if(candles.length < 2) return null;
+  const closes = candles.map(c=>c.close);
+  const {slope, intercept} = linreg(closes);
+  let upperOff, lowerOff;
+  if(opts.widthMode === "extreme"){
+    upperOff = 0; lowerOff = 0;
+    candles.forEach((c,i)=>{
+      const reg = slope*i + intercept;
+      upperOff = Math.max(upperOff, c.high - reg);
+      lowerOff = Math.min(lowerOff, c.low - reg);
+    });
+  } else {
+    const std = residualStdDev(candles, slope, intercept);
+    const mult = opts.stdMult || 2;
+    upperOff = std*mult;
+    lowerOff = -std*mult;
+  }
+  return {
+    slope, intercept, upperOff, lowerOff,
+    r2: computeR2(candles, slope, intercept),
+    n: candles.length,
+    t0: candles[0].time,
+    t1: candles[candles.length-1].time
+  };
+}
+function channelPoints(ch, extendBars, barSec){
+  const midStart = ch.intercept;
+  const midEnd = ch.slope*(ch.n-1) + ch.intercept;
+  const pts = {
+    mid:  [{time:ch.t0, value:midStart}, {time:ch.t1, value:midEnd}],
+    upper:[{time:ch.t0, value:midStart+ch.upperOff}, {time:ch.t1, value:midEnd+ch.upperOff}],
+    lower:[{time:ch.t0, value:midStart+ch.lowerOff}, {time:ch.t1, value:midEnd+ch.lowerOff}]
+  };
+  if(extendBars > 0){
+    const tExt = ch.t1 + extendBars*barSec;
+    const midExt = ch.slope*(ch.n-1+extendBars) + ch.intercept;
+    pts.mid.push({time:tExt, value:midExt});
+    pts.upper.push({time:tExt, value:midExt+ch.upperOff});
+    pts.lower.push({time:tExt, value:midExt+ch.lowerOff});
+  }
+  return pts;
+}
+// Devuelve hasta 3 canales usando VENTANAS DESLIZANTES de tamaño fijo (siempre "blockSize" velas
+// completas cada una), no bloques que se reinician a cero. Así el canal "actual" nunca se calcula
+// sobre un puñado de velas recién nacidas —siempre tiene la muestra completa— y no se dispara con
+// ruido de corto plazo. Cada recálculo simplemente desliza la ventana hacia la vela más reciente.
+function computeChannels(candles, opts){
+  const blockSize = opts.blockMode === "manual" ? opts.manualBlockSize : computeAutoBlockSize(candles);
+  const total = candles.length;
+  const chOpts = {widthMode: opts.widthMode, stdMult: opts.stdMult};
+  if(total < Math.max(6, Math.round(blockSize*0.3))){
+    return {current: null, previous: null, older: null, blockSize};
+  }
+  const curSlice = candles.slice(Math.max(0, total-blockSize));
+  const current = computeChannel(curSlice, chOpts);
+  let previous = null, older = null;
+  if(total >= blockSize*2){
+    previous = computeChannel(candles.slice(total-2*blockSize, total-blockSize), chOpts);
+  }
+  if(total >= blockSize*3){
+    older = computeChannel(candles.slice(total-3*blockSize, total-2*blockSize), chOpts);
+  }
+  return {current, previous, older, blockSize};
+}
+function slopePctPerDay(ch, barSec){
+  if(!ch || !ch.intercept) return 0;
+  return (ch.slope/ch.intercept) * (86400/barSec) * 100;
+}
+
+/* ============================= DATA FETCHING ============================= */
+function mapCandles(raw){
+  return raw.map(c=>({
+    time: Math.floor(c.t/1000),
+    open: parseFloat(c.o), high: parseFloat(c.h),
+    low: parseFloat(c.l), close: parseFloat(c.c),
+    volume: parseFloat(c.v)
+  })).sort((a,b)=>a.time-b.time);
+}
+
+async function fetchCandles(coin, interval, count, timeoutMs){
+  const ms = INTERVAL_MS[interval];
+  const endTime = Date.now();
+  const startTime = endTime - count*ms - ms;
+  const raw = await apiPost({type:"candleSnapshot", req:{coin, interval, startTime, endTime}}, timeoutMs);
+  return mapCandles(raw || []);
+}
+
+// Trae solo las velas nuevas desde el último timestamp ya cargado (evita re-descargar todo el historial)
+async function fetchCandlesSince(coin, interval, sinceMs, timeoutMs){
+  const endTime = Date.now();
+  const startTime = sinceMs;
+  const raw = await apiPost({type:"candleSnapshot", req:{coin, interval, startTime, endTime}}, timeoutMs);
+  return mapCandles(raw || []);
+}
+
+async function fetchMetaAndCtxs(timeoutMs){
+  const res = await apiPost({type:"metaAndAssetCtxs"}, timeoutMs);
+  return { universe: res[0].universe, ctxs: res[1] };
+}
+
+/* ============================= RENDER: VWAP =============================
+   VWAP anclado: se reinicia al comienzo de cada sesión (día UTC), semana (lunes UTC)
+   o nunca ("todo"), y se recalcula sobre las velas ya cargadas en el gráfico principal
+   (state.mainCandles), sin peticiones extra a la API. */
+function vwapAnchorKey(timeSec, anchor){
+  if(anchor === "all") return "all";
+  const d = new Date(timeSec*1000);
+  if(anchor === "week"){
+    const day = d.getUTCDay();
+    const diff = (day === 0 ? -6 : 1 - day);
+    const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()+diff));
+    return monday.toISOString().slice(0,10);
+  }
+  return d.toISOString().slice(0,10); // "session" -> día UTC
+}
+function computeVwap(candles, anchor){
+  let cumPV=0, cumVol=0, cumPV2=0, curKey=null;
+  const line=[], upper=[], lower=[];
+  candles.forEach(c=>{
+    const key = vwapAnchorKey(c.time, anchor);
+    if(key !== curKey){ curKey = key; cumPV=0; cumVol=0; cumPV2=0; }
+    const tp = (c.high + c.low + c.close)/3;
+    const vol = c.volume || 0;
+    cumPV += tp*vol;
+    cumVol += vol;
+    cumPV2 += vol*tp*tp;
+    if(cumVol <= 0) return;
+    const vwap = cumPV/cumVol;
+    const variance = Math.max(0, cumPV2/cumVol - vwap*vwap);
+    const sd = Math.sqrt(variance);
+    line.push({time:c.time, value:vwap});
+    upper.push({time:c.time, value:vwap+sd});
+    lower.push({time:c.time, value:vwap-sd});
+  });
+  return {line, upper, lower};
+}
+function updateVwap(){
+  if(!state.vwapOn || state.mainCandles.length < 2){
+    vwapLine.setData([]); vwapUpperLine.setData([]); vwapLowerLine.setData([]);
+    return;
+  }
+  const {line, upper, lower} = computeVwap(state.mainCandles, state.vwapAnchor);
+  vwapLine.setData(line);
+  if(state.vwapBandsOn){
+    vwapUpperLine.setData(upper);
+    vwapLowerLine.setData(lower);
+  } else {
+    vwapUpperLine.setData([]); vwapLowerLine.setData([]);
+  }
+}
+
+/* ============================= RENDER: SOPORTE Y RESISTENCIA =============================
+   Detección automática de pivotes de precio (fractales): una vela es pivote alto/bajo si su
+   máximo/mínimo supera al de N velas a cada lado. Los pivotes cercanos entre sí se agrupan en
+   "niveles"; cada nivel se puntúa por nº de toques + qué tan reciente fue el último, y se
+   descarta si el precio ya lo rompió con fuerza después de ese último toque (queda invalidado).
+   De los niveles vigentes por encima/debajo del precio actual, se elige el de mayor puntaje:
+   así se seguimos automáticamente "el último o el más importante", y se recalcula solo con
+   cada actualización de velas. */
+function findPivots(candles, strength){
+  const highs = [], lows = [];
+  const n = candles.length;
+  for(let i=strength; i<n-strength; i++){
+    const c = candles[i];
+    let isHigh = true, isLow = true;
+    for(let k=1;k<=strength && (isHigh||isLow); k++){
+      if(candles[i-k].high > c.high || candles[i+k].high > c.high) isHigh = false;
+      if(candles[i-k].low < c.low || candles[i+k].low < c.low) isLow = false;
+    }
+    if(isHigh) highs.push({price:c.high, index:i});
+    if(isLow) lows.push({price:c.low, index:i});
+  }
+  return {highs, lows};
+}
+function clusterLevels(points, tolPct){
+  const sorted = points.slice().sort((a,b)=>a.price-b.price);
+  const clusters = [];
+  sorted.forEach(p=>{
+    const cluster = clusters.find(cl => Math.abs(p.price-cl.avgPrice)/cl.avgPrice <= tolPct);
+    if(cluster){
+      cluster.points.push(p);
+      cluster.avgPrice = cluster.points.reduce((s,q)=>s+q.price,0)/cluster.points.length;
+      cluster.lastIndex = Math.max(cluster.lastIndex, p.index);
+      cluster.count = cluster.points.length;
+    } else {
+      clusters.push({avgPrice:p.price, points:[p], lastIndex:p.index, count:1});
+    }
+  });
+  return clusters;
+}
+function computeSupportResistance(candles, strength, lookback){
+  if(!candles || candles.length < strength*2+5) return {support:null, resistance:null};
+  const recent = candles.slice(-lookback);
+  const n = recent.length;
+  const {highs, lows} = findPivots(recent, strength);
+  const currentPrice = recent[n-1].close;
+  const tolPct = 0.0025;   // agrupa toques dentro de ±0.25%
+  const breakTolPct = 0.006; // ruptura decisiva: cierre más allá de ±0.6% del nivel
+
+  function score(cluster){
+    const age = n-1-cluster.lastIndex;
+    const recencyBonus = Math.max(0, 1-age/n);
+    return cluster.count + recencyBonus*2;
+  }
+  function isInvalidated(cluster, isResistance){
+    for(let i=cluster.lastIndex+1;i<n;i++){
+      const c = recent[i];
+      if(isResistance && c.close > cluster.avgPrice*(1+breakTolPct)) return true;
+      if(!isResistance && c.close < cluster.avgPrice*(1-breakTolPct)) return true;
+    }
+    return false;
+  }
+
+  let resistance = null, resScore = -Infinity;
+  clusterLevels(highs, tolPct).forEach(cl=>{
+    if(cl.avgPrice <= currentPrice || isInvalidated(cl,true)) return;
+    const s = score(cl);
+    if(s > resScore){ resScore = s; resistance = cl; }
+  });
+  let support = null, supScore = -Infinity;
+  clusterLevels(lows, tolPct).forEach(cl=>{
+    if(cl.avgPrice >= currentPrice || isInvalidated(cl,false)) return;
+    const s = score(cl);
+    if(s > supScore){ supScore = s; support = cl; }
+  });
+
+  return {
+    support: support ? {price:support.avgPrice, touches:support.count, ageBars:n-1-support.lastIndex} : null,
+    resistance: resistance ? {price:resistance.avgPrice, touches:resistance.count, ageBars:n-1-resistance.lastIndex} : null
+  };
+}
+let srSupportLine = null, srResistanceLine = null;
+function updateSRInfoPanel(support, resistance){
+  const box = el("srInfo");
+  if(!box) return;
+  if(!state.srOn){ box.textContent = "Soporte/Resistencia desactivados."; return; }
+  if(!support && !resistance){ box.textContent = "Sin niveles vigentes detectados todavía."; return; }
+  const lines = [];
+  if(resistance) lines.push(`Resistencia ${fmtPrice(resistance.price)} · ${resistance.touches} toques · hace ${resistance.ageBars} velas`);
+  if(support) lines.push(`Soporte ${fmtPrice(support.price)} · ${support.touches} toques · hace ${support.ageBars} velas`);
+  box.textContent = lines.join("  ·  ");
+}
+function updateSR(){
+  if(!state.srOn || state.mainCandles.length < state.srStrength*2+5){
+    if(srSupportLine){ candleSeries.removePriceLine(srSupportLine); srSupportLine=null; }
+    if(srResistanceLine){ candleSeries.removePriceLine(srResistanceLine); srResistanceLine=null; }
+    updateSRInfoPanel(null,null);
+    return;
+  }
+  const {support, resistance} = computeSupportResistance(state.mainCandles, state.srStrength, state.srLookback);
+  if(support){
+    if(!srSupportLine){
+      srSupportLine = candleSeries.createPriceLine({ price:support.price, color:"#5FE3B8", lineWidth:2, lineStyle:DASHED, axisLabelVisible:true, title:"Soporte" });
+    } else {
+      srSupportLine.applyOptions({ price:support.price });
+    }
+  } else if(srSupportLine){ candleSeries.removePriceLine(srSupportLine); srSupportLine=null; }
+  if(resistance){
+    if(!srResistanceLine){
+      srResistanceLine = candleSeries.createPriceLine({ price:resistance.price, color:"#FF6B6B", lineWidth:2, lineStyle:DASHED, axisLabelVisible:true, title:"Resistencia" });
+    } else {
+      srResistanceLine.applyOptions({ price:resistance.price });
+    }
+  } else if(srResistanceLine){ candleSeries.removePriceLine(srResistanceLine); srResistanceLine=null; }
+  updateSRInfoPanel(support, resistance);
+}
+
+/* ============================= RENDER: MAIN CHART ============================= */
+async function loadMainChart(){
+  setLoading(true);
+  setStatus("Cargando velas de "+state.coin+" ("+state.interval+")…");
+  try{
+    const candles = await fetchCandles(state.coin, state.interval, state.candleCount, 30000);
+    if(candles.length === 0){ showError("Sin datos para "+state.coin+" en "+state.interval); setLoading(false); return; }
+    candleSeries.setMarkers([]);
+    candleSeries.setData(candles.map(c=>({time:c.time, open:c.open, high:c.high, low:c.low, close:c.close})));
+    volumeSeries.setData(candles.map(c=>({time:c.time, value:c.volume, color: c.close>=c.open ? "rgba(95,227,184,0.5)" : "rgba(255,107,107,0.5)"})));
+    state.lastCandle = candles[candles.length-1];
+    state.mainCandles = candles.slice();
+    rebuildLiquidityModel();
+    updateVwap();
+    updateSR();
+    chart.timeScale().fitContent();
+    setStatus("Actualizado");
+    lastUpdateEl.textContent = new Date().toLocaleTimeString();
+    lastLiveSuccessMs = Date.now();
+    if(wsReady) wsSubscribeCandle(state.coin, state.interval);
+  } catch(err){
+    console.error(err);
+    showError("No se pudo cargar el gráfico: " + err.message);
+    setStatus("Error de conexión");
+  } finally {
+    setLoading(false);
+  }
+}
+
+// Aplica una vela nueva/actualizada al gráfico y al estado. La usan tanto el
+// refresco por REST como los mensajes en vivo del WebSocket, para que ambas vías
+// dejen el gráfico exactamente en el mismo estado.
+function applyLiveCandleUpdate(c){
+  const last = state.mainCandles[state.mainCandles.length-1];
+  if(last && c.time < last.time) return; // vela más vieja que la última conocida: ignorar
+  candleSeries.update({time:c.time, open:c.open, high:c.high, low:c.low, close:c.close});
+  volumeSeries.update({time:c.time, value:c.volume, color: c.close>=c.open ? "rgba(95,227,184,0.5)" : "rgba(255,107,107,0.5)"});
+  const lastIdx = state.mainCandles.length - 1;
+  if(lastIdx >= 0 && state.mainCandles[lastIdx].time === c.time){
+    state.mainCandles[lastIdx] = c;
+  } else {
+    state.mainCandles.push(c);
+    if(state.mainCandles.length > state.candleCount + 50) state.mainCandles.shift();
+  }
+  state.lastCandle = c;
+  lastUpdateEl.textContent = new Date().toLocaleTimeString();
+  lastLiveSuccessMs = Date.now();
+  // Los indicadores derivados (liquidez, VWAP, S/R) se recalculan en un try/catch aparte:
+  // si alguno fallara, no debe contarse como un fallo de "actualización en vivo" ni
+  // disparar el backoff — los datos de precio/vela ya se recibieron y aplicaron bien.
+  try{
+    rebuildLiquidityModel();
+    updateVwap();
+    updateSR();
+  }catch(err){
+    console.warn("indicator refresh failed (non-fatal)", err);
+  }
+}
+
+async function updateLiveCandle(){
+  if(!state.lastCandle) return;
+  // Si el WebSocket está entregando velas frescas para este símbolo/temporalidad en
+  // este momento, no hace falta pedir nada por REST: ya se está actualizando en vivo
+  // vela a vela y no tiene sentido gastar la (poca) conexión disponible en otra petición.
+  if(wsReady && wsSubscribedCoin === state.coin && wsSubscribedInterval === state.interval
+     && (Date.now() - lastWsCandleMs) < WS_FRESH_MS){
+    lastLiveSuccessMs = Date.now();
+    return;
+  }
+  const ms = INTERVAL_MS[state.interval];
+  // Pedimos desde la vela anterior a la última cargada: refresca la vela en curso
+  // y trae únicamente las velas nuevas que hayan aparecido, nunca el historial completo.
+  const since = (state.lastCandle.time * 1000) - ms;
+  // Si llevamos más de LIVE_STALE_MS de reloj real sin lograr un refresco (sin importar
+  // la temporalidad elegida), NO recargamos el historial completo (DEFAULT_CANDLE_COUNT=
+  // 1000 velas): en una conexión muy lenta esa petición pesada nunca llega a tiempo y el
+  // gráfico se queda "trabado" mientras el precio de arriba (mucho más liviano) sigue
+  // actualizándose solo. En su lugar, resincronizamos con una petición pequeña y rápida.
+  if(Date.now() - lastLiveSuccessMs > LIVE_STALE_MS){
+    await resyncLiveCandlesLight();
+    return;
+  }
+  const candles = await fetchCandlesSince(state.coin, state.interval, since, 12000);
+  if(candles.length === 0) return;
+  candles.forEach(applyLiveCandleUpdate);
+}
+
+// Resync ligero: trae solo LIVE_RESYNC_CANDLE_COUNT velas recientes (no las 1000 del
+// historial completo) para poder reconectar rápido incluso con una conexión muy lenta.
+// Sacrifica temporalmente algo de historial visible a cambio de que el precio y el
+// gráfico vuelvan a moverse juntos cuanto antes; un refresco manual o un cambio de
+// símbolo/temporalidad restauran el historial completo más adelante.
+async function resyncLiveCandlesLight(){
+  const candles = await fetchCandles(state.coin, state.interval, LIVE_RESYNC_CANDLE_COUNT, 12000);
+  if(!candles.length) return;
+  state.mainCandles = candles.slice();
+  candleSeries.setData(state.mainCandles.map(c=>({time:c.time, open:c.open, high:c.high, low:c.low, close:c.close})));
+  volumeSeries.setData(state.mainCandles.map(c=>({time:c.time, value:c.volume, color: c.close>=c.open ? "rgba(95,227,184,0.5)" : "rgba(255,107,107,0.5)"})));
+  state.lastCandle = candles[candles.length-1];
+  lastUpdateEl.textContent = new Date().toLocaleTimeString();
+  lastLiveSuccessMs = Date.now();
+  try{
+    rebuildLiquidityModel();
+    updateVwap();
+    updateSR();
+  }catch(err){
+    console.warn("indicator refresh failed (non-fatal)", err);
+  }
+}
+
+/* ============================= WEBSOCKET EN VIVO =============================
+   Complemento al sondeo por REST: nos suscribimos por WebSocket a las velas del
+   símbolo/temporalidad actuales y al precio medio de todos los activos, para que
+   el precio y las velas lleguen empujados al instante en vez de tener que pedirlos
+   por sondeo. Es puramente ADITIVO y con reconexión automática: si el WebSocket no
+   conecta, tarda, o el navegador/red lo bloquean, el sondeo por REST (ya reforzado
+   más arriba) sigue funcionando exactamente igual y la app no pierde nada. */
+const WS_FRESH_MS = 10000;      // por debajo de esto, el WS se considera "al día" y se salta el REST
+const WS_PING_MS = 25000;
+let ws = null;
+let wsReady = false;
+let wsReconnectTimer = null;
+let wsPingTimer = null;
+let wsReconnectDelay = 2000;
+let wsSubscribedCoin = null;
+let wsSubscribedInterval = null;
+let lastWsCandleMs = 0;
+let lastWsMidMs = 0;
+
+function wsSend(obj){
+  if(ws && ws.readyState === WebSocket.OPEN){
+    try{ ws.send(JSON.stringify(obj)); }catch(err){ /* se resolverá solo con la reconexión */ }
+  }
+}
+function wsSubscribeCandle(coin, interval){
+  if(!coin || !interval) return;
+  if(wsSubscribedCoin === coin && wsSubscribedInterval === interval) return;
+  wsUnsubscribeCandle();
+  wsSend({ method:"subscribe", subscription:{ type:"candle", coin, interval } });
+  wsSubscribedCoin = coin;
+  wsSubscribedInterval = interval;
+  lastWsCandleMs = 0; // aún no llegó ninguna vela de esta nueva suscripción
+}
+function wsUnsubscribeCandle(){
+  if(wsSubscribedCoin && wsSubscribedInterval){
+    wsSend({ method:"unsubscribe", subscription:{ type:"candle", coin:wsSubscribedCoin, interval:wsSubscribedInterval } });
+  }
+  wsSubscribedCoin = null;
+  wsSubscribedInterval = null;
+}
+function parseWsCandle(d){
+  if(!d) return null;
+  const rawTime = d.t ?? d.T ?? d.time;
+  const time = Math.floor(Number(rawTime) / (Number(rawTime) > 1e12 ? 1000 : 1));
+  const open = parseFloat(d.o ?? d.open);
+  const high = parseFloat(d.h ?? d.high);
+  const low = parseFloat(d.l ?? d.low);
+  const close = parseFloat(d.c ?? d.close);
+  const volume = parseFloat(d.v ?? d.volume ?? 0);
+  if(!Number.isFinite(time) || !Number.isFinite(open) || !Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(close)) return null;
+  return {time, open, high, low, close, volume};
+}
+function handleWsCandleMsg(d){
+  if(!d) return;
+  const coin = d.s ?? d.coin;
+  const interval = d.i ?? d.interval;
+  if(coin && coin !== state.coin) return;
+  if(interval && interval !== state.interval) return;
+  const c = parseWsCandle(d);
+  if(!c) return;
+  lastWsCandleMs = Date.now();
+  if(!state.lastCandle) return; // el gráfico todavía no cargó su historial base
+  applyLiveCandleUpdate(c);
+}
+function handleWsMidsMsg(d){
+  if(!d || !d.mids) return;
+  const midStr = d.mids[state.coin];
+  if(midStr == null) return;
+  const mid = parseFloat(midStr);
+  if(!Number.isFinite(mid)) return;
+  lastWsMidMs = Date.now();
+  const priceEl = el("statPrice");
+  if(priceEl) priceEl.textContent = fmtPrice(mid);
+}
+function onWsOpen(){
+  wsReady = true;
+  wsReconnectDelay = 2000;
+  wsSend({ method:"subscribe", subscription:{ type:"allMids" } });
+  wsSubscribedCoin = null; wsSubscribedInterval = null;
+  wsSubscribeCandle(state.coin, state.interval);
+  clearInterval(wsPingTimer);
+  wsPingTimer = setInterval(()=> wsSend({ method:"ping" }), WS_PING_MS);
+}
+function onWsMessage(ev){
+  let msg;
+  try{ msg = JSON.parse(ev.data); }catch(err){ return; }
+  const channel = msg.channel;
+  if(channel === "candle") handleWsCandleMsg(msg.data);
+  else if(channel === "allMids") handleWsMidsMsg(msg.data);
+  // otros canales (subscriptionResponse, pong, error, etc.) se ignoran a propósito
+}
+function onWsCloseOrError(){
+  wsReady = false;
+  wsSubscribedCoin = null; wsSubscribedInterval = null;
+  clearInterval(wsPingTimer);
+  clearTimeout(wsReconnectTimer);
+  wsReconnectTimer = setTimeout(connectWS, wsReconnectDelay);
+  wsReconnectDelay = Math.min(wsReconnectDelay * 1.6, 15000);
+}
+function connectWS(){
+  if(typeof WebSocket === "undefined") return; // entorno sin soporte de WebSocket: seguimos solo con REST
+  try{
+    ws = new WebSocket(WS_URL);
+    ws.addEventListener("open", onWsOpen);
+    ws.addEventListener("message", onWsMessage);
+    ws.addEventListener("close", onWsCloseOrError);
+    ws.addEventListener("error", onWsCloseOrError);
+  }catch(err){
+    onWsCloseOrError();
+  }
+}
+
+/* ============================= RENDER: REGRESSION CHANNELS ============================= */
+function clearChannelLines(){
+  Object.values(chLines).forEach(line => line.setData([]));
+  candleSeries.setMarkers([]);
+  state.lastChannelCalc = null;
+  updateChannelInfoPanel();
+}
+
+async function loadRegressionChannels(){
+  if(!state.chOn){ clearChannelLines(); return; }
+  const candles = await fetchCandles(state.coin, state.chBaseInterval, REGRESSION_LOOKBACK, 20000);
+  if(candles.length < 4) return;
+  const opts = {
+    widthMode: state.chWidthMode,
+    stdMult: state.chStdMult,
+    blockMode: state.chBlockMode,
+    manualBlockSize: state.chManualBlockSize
+  };
+  const {current, previous, older, blockSize} = computeChannels(candles, opts);
+  const barSec = INTERVAL_MS[state.chBaseInterval]/1000;
+  const extend = Math.round(blockSize*0.5);
+
+  if(older){
+    const o = channelPoints(older, 0, barSec);
+    const oc = colorForSlope(older.slope, "faint");
+    chLines.olderUpper.applyOptions({color:oc}); chLines.olderUpper.setData(o.upper);
+    chLines.olderLower.applyOptions({color:oc}); chLines.olderLower.setData(o.lower);
+    chLines.olderMid.applyOptions({color:oc});   chLines.olderMid.setData(o.mid);
+  } else {
+    chLines.olderUpper.setData([]); chLines.olderLower.setData([]); chLines.olderMid.setData([]);
+  }
+  if(previous){
+    const p = channelPoints(previous, 0, barSec);
+    const pc = colorForSlope(previous.slope, "dim");
+    chLines.prevUpper.applyOptions({color:pc}); chLines.prevUpper.setData(p.upper);
+    chLines.prevLower.applyOptions({color:pc}); chLines.prevLower.setData(p.lower);
+    chLines.prevMid.applyOptions({color:pc});   chLines.prevMid.setData(p.mid);
+  } else {
+    chLines.prevUpper.setData([]); chLines.prevLower.setData([]); chLines.prevMid.setData([]);
+  }
+  if(current){
+    const c = channelPoints(current, extend, barSec);
+    const cc = colorForSlope(current.slope, "bright");
+    chLines.curUpper.applyOptions({color:cc}); chLines.curUpper.setData(c.upper);
+    chLines.curLower.applyOptions({color:cc}); chLines.curLower.setData(c.lower);
+    chLines.curMid.applyOptions({color:cc});   chLines.curMid.setData(c.mid);
+  }
+
+  state.lastChannelCalc = {current, previous, older, barSec, blockSize};
+  applyReversalMarker();
+  updateChannelInfoPanel();
+}
+
+// Marca en el gráfico el punto exacto donde el canal cambia de dirección
+// (de alcista a bajista o viceversa) al pasar del anterior al actual, filtrando
+// reversiones "de ruido" que no superen el umbral mínimo de pendiente configurado.
+function applyReversalMarker(){
+  const calc = state.lastChannelCalc;
+  if(!calc || !calc.current || !calc.previous){ candleSeries.setMarkers([]); return; }
+  const {current, previous, barSec} = calc;
+  const sCur = Math.sign(current.slope), sPrev = Math.sign(previous.slope);
+  const reversed = sCur !== 0 && sPrev !== 0 && sCur !== sPrev;
+  const curPct = Math.abs(slopePctPerDay(current, barSec));
+  if(!reversed || curPct < state.chReversalThreshold){ candleSeries.setMarkers([]); return; }
+  const bullish = sCur > 0;
+  candleSeries.setMarkers([{
+    time: current.t0,
+    position: bullish ? "belowBar" : "aboveBar",
+    color: bullish ? "#5FE3B8" : "#FF6B6B",
+    shape: bullish ? "arrowUp" : "arrowDown",
+    text: bullish ? "Reversión alcista" : "Reversión bajista"
+  }]);
+}
+
+function updateChannelInfoPanel(){
+  const calc = state.lastChannelCalc;
+  const box = el("chInfo");
+  if(!box) return;
+  if(!state.chOn){ box.textContent = "Canales desactivados."; return; }
+  if(!calc || !calc.current){ box.textContent = "Datos insuficientes todavía."; return; }
+  const { current, previous, older, barSec, blockSize } = calc;
+  const line = (label, ch) => {
+    if(!ch) return label+": —";
+    const pct = slopePctPerDay(ch, barSec);
+    const dir = pct >= 0 ? "↑" : "↓";
+    return `${label}: R² ${(ch.r2*100).toFixed(0)}%  ${dir} ${Math.abs(pct).toFixed(2)}%/día`;
+  };
+  box.textContent = [
+    line("Actual", current),
+    line("Anterior", previous),
+    line("Anterior-2", older),
+    `Bloque: ${blockSize} velas (${state.chBlockMode === "auto" ? "automático" : "manual"})`
+  ].join("\n");
+}
+
+/* ============================= WATCHLIST ============================= */
+/* ---- Favoritos de la lista de activos: hasta 6, siempre al principio ---- */
+const FAVORITES_KEY = "hlTerminalFavorites_v1";
+const MAX_FAVORITES = 6;
+function loadFavorites(){
+  try{
+    const arr = JSON.parse(localStorage.getItem(FAVORITES_KEY));
+    return Array.isArray(arr) ? arr.slice(0, MAX_FAVORITES) : [];
+  }catch(e){ return []; }
+}
+function saveFavorites(){
+  try{ localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites)); }catch(e){}
+}
+let favorites = loadFavorites();
+function isFavorite(coin){ return favorites.includes(coin); }
+function toggleFavorite(coin){
+  const idx = favorites.indexOf(coin);
+  if(idx >= 0){
+    favorites.splice(idx, 1);
+  } else {
+    if(favorites.length >= MAX_FAVORITES){
+      showError(`Máximo ${MAX_FAVORITES} favoritos. Quita alguno antes de añadir otro.`);
+      return;
+    }
+    favorites.push(coin);
+  }
+  saveFavorites();
+  renderWatchlist(el("wlSearch").value);
+}
+
+function renderWatchlist(filter){
+  const list = el("wlList");
+  const f = (filter||"").trim().toUpperCase();
+  const rows = state.universe.map((u, i)=>({u, ctx: state.assetCtxs[i]}))
+    .filter(r => !r.u.isDelisted)
+    .filter(r => !f || r.u.name.toUpperCase().includes(f));
+
+  if(rows.length === 0){ list.innerHTML = '<div class="wl-empty">Sin resultados</div>'; return; }
+
+  // Los favoritos siempre van primero (en el orden en que se marcaron); el resto,
+  // como antes, ordenado por volumen 24h.
+  rows.sort((a,b)=>{
+    const af = isFavorite(a.u.name), bf = isFavorite(b.u.name);
+    if(af !== bf) return af ? -1 : 1;
+    if(af && bf) return favorites.indexOf(a.u.name) - favorites.indexOf(b.u.name);
+    return parseFloat(b.ctx.dayNtlVlm||0) - parseFloat(a.ctx.dayNtlVlm||0);
+  });
+
+  const favRows = rows.filter(r => isFavorite(r.u.name));
+  const restRows = rows.filter(r => !isFavorite(r.u.name));
+
+  function rowHtml(r){
+    const mark = parseFloat(r.ctx.markPx);
+    const prev = parseFloat(r.ctx.prevDayPx);
+    const chg = prev ? ((mark-prev)/prev*100) : 0;
+    const cls = chg >= 0 ? "up" : "down";
+    const active = r.u.name === state.coin ? " active" : "";
+    const fav = isFavorite(r.u.name);
+    return `<div class="wl-row${active}" data-coin="${r.u.name}">
+      <div class="name"><span class="wl-star${fav?" on":""}" data-star="${r.u.name}">${fav?"★":"☆"}</span>${r.u.name}<span> PERP</span></div>
+      <div class="px">${fmtPrice(mark)}</div>
+      <div class="chg ${cls}">${fmtPct(chg)}</div>
+    </div>`;
+  }
+
+  let html = favRows.map(rowHtml).join("");
+  if(favRows.length && restRows.length){
+    html += `<div class="wl-fav-sep">Todos los activos</div>`;
+  }
+  html += restRows.map(rowHtml).join("");
+  list.innerHTML = html;
+
+  list.querySelectorAll(".wl-star").forEach(star=>{
+    star.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      toggleFavorite(star.getAttribute("data-star"));
+    });
+  });
+  list.querySelectorAll(".wl-row").forEach(row=>{
+    row.addEventListener("click", ()=> selectCoin(row.getAttribute("data-coin")));
+  });
+}
+
+function updateTickerFromCtx(){
+  const idx = state.universe.findIndex(u=>u.name === state.coin);
+  if(idx < 0) return;
+  const ctx = state.assetCtxs[idx];
+  if(!ctx) return;
+  const mark = parseFloat(ctx.markPx);
+  const prev = parseFloat(ctx.prevDayPx);
+  const chg = prev ? ((mark-prev)/prev*100) : 0;
+  const vol = parseFloat(ctx.dayNtlVlm||0);
+  el("statPrice").textContent = fmtPrice(mark);
+  const changeEl = el("statChange");
+  changeEl.textContent = fmtPct(chg);
+  changeEl.className = "value " + (chg>=0 ? "up":"down");
+  el("statVolume").textContent = fmtUsd(vol);
+  if(state.lastCandle){
+    el("statHiLo").textContent = fmtPrice(state.lastCandle.high) + " / " + fmtPrice(state.lastCandle.low);
+  }
+}
+
+async function refreshWatchlistData(){
+  const {universe, ctxs} = await fetchMetaAndCtxs(12000);
+  state.universe = universe;
+  state.assetCtxs = ctxs;
+  renderWatchlist(el("wlSearch").value);
+  updateTickerFromCtx();
+}
+
+/* ============================= CONTROLS ============================= */
+const LIQ_TIER_LABELS = [10, 25, 50, 100];
+
+function buildLiqChips(){
+  const wrap = el("liqLevChips");
+  wrap.innerHTML = LIQ_TIER_LABELS.map(lev =>
+    `<div class="liq-chip${state.liqLevs.includes(lev) ? " active" : ""}" data-lev="${lev}">${lev}×</div>`
+  ).join("");
+  wrap.querySelectorAll(".liq-chip").forEach(chip=>{
+    chip.addEventListener("click", ()=>{
+      const lev = parseInt(chip.getAttribute("data-lev"), 10);
+      const idx = state.liqLevs.indexOf(lev);
+      if(idx >= 0) state.liqLevs.splice(idx, 1); else state.liqLevs.push(lev);
+      chip.classList.toggle("active");
+      rebuildLiquidityModel();
+    });
+  });
+}
+buildLiqChips();
+
+function closeAllPanels(){
+  document.querySelectorAll(".liq-panel.open").forEach(p=>p.classList.remove("open"));
+  el("drawToolbarFlyout").classList.remove("open");
+}
+el("liqBtn").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  const p = el("liqPanel");
+  const wasOpen = p.classList.contains("open");
+  closeAllPanels();
+  if(!wasOpen) p.classList.add("open");
+});
+el("chBtn").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  const p = el("chPanel");
+  const wasOpen = p.classList.contains("open");
+  closeAllPanels();
+  if(!wasOpen) p.classList.add("open");
+});
+el("vwapBtn").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  const p = el("vwapPanel");
+  const wasOpen = p.classList.contains("open");
+  closeAllPanels();
+  if(!wasOpen) p.classList.add("open");
+});
+el("srBtn").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  const p = el("srPanel");
+  const wasOpen = p.classList.contains("open");
+  closeAllPanels();
+  if(!wasOpen) p.classList.add("open");
+});
+document.addEventListener("click", (e)=>{
+  if(e.target.closest(".liq-panel") ||
+     e.target.closest("#liqBtn") || e.target.closest("#chBtn") || e.target.closest("#vwapBtn") || e.target.closest("#srBtn") ||
+     e.target.closest("#drawToolbarFlyout") || e.target.closest("#drawToolsBtn")) return;
+  closeAllPanels();
+});
+
+const liqOnToggleEl = el("liqOnToggle");
+liqOnToggleEl.classList.toggle("on", state.liqOn);
+liqOnToggleEl.addEventListener("click", ()=>{
+  state.liqOn = !state.liqOn;
+  liqOnToggleEl.classList.toggle("on", state.liqOn);
+  rebuildLiquidityModel();
+  saveSettings();
+});
+
+const liqThresholdEl = el("liqThreshold");
+liqThresholdEl.value = Math.round(state.liqThreshold*100);
+el("liqThresholdVal").textContent = state.liqThreshold.toFixed(2);
+liqThresholdEl.addEventListener("input", ()=>{
+  state.liqThreshold = parseInt(liqThresholdEl.value, 10)/100;
+  el("liqThresholdVal").textContent = state.liqThreshold.toFixed(2);
+  drawLiquidityOverlay();
+});
+liqThresholdEl.addEventListener("change", saveSettings);
+
+const liqSweepToggleEl = el("liqSweepToggle");
+liqSweepToggleEl.classList.toggle("on", state.liqSweepOn);
+liqSweepToggleEl.addEventListener("click", ()=>{
+  state.liqSweepOn = !state.liqSweepOn;
+  liqSweepToggleEl.classList.toggle("on", state.liqSweepOn);
+  drawLiquidityOverlay();
+  saveSettings();
+});
+
+/* ---- Panel de ajustes de canales ---- */
+const chOnToggleEl = el("chOnToggle");
+chOnToggleEl.classList.toggle("on", state.chOn);
+chOnToggleEl.addEventListener("click", ()=>{
+  state.chOn = !state.chOn;
+  chOnToggleEl.classList.toggle("on", state.chOn);
+  if(state.chOn){
+    loadRegressionChannels().catch(err=>console.warn("channel settings update failed", err));
+  } else {
+    clearChannelLines();
+  }
+  saveSettings();
+});
+
+/* ---- Panel de ajustes de VWAP ---- */
+const vwapOnToggleEl = el("vwapOnToggle");
+vwapOnToggleEl.classList.toggle("on", state.vwapOn);
+vwapOnToggleEl.addEventListener("click", ()=>{
+  state.vwapOn = !state.vwapOn;
+  vwapOnToggleEl.classList.toggle("on", state.vwapOn);
+  updateVwap();
+  saveSettings();
+});
+
+const vwapBandsToggleEl = el("vwapBandsToggle");
+vwapBandsToggleEl.classList.toggle("on", state.vwapBandsOn);
+vwapBandsToggleEl.addEventListener("click", ()=>{
+  state.vwapBandsOn = !state.vwapBandsOn;
+  vwapBandsToggleEl.classList.toggle("on", state.vwapBandsOn);
+  updateVwap();
+  saveSettings();
+});
+
+const vwapAnchorEls = [el("vwapAnchorSession"), el("vwapAnchorWeek"), el("vwapAnchorAll")];
+function applyVwapAnchorUI(){
+  const active = vwapAnchorEls.find(c=>c.getAttribute("data-v") === state.vwapAnchor) || vwapAnchorEls[0];
+  setActiveChip(vwapAnchorEls, active);
+}
+vwapAnchorEls.forEach(chip=>{
+  chip.addEventListener("click", ()=>{
+    state.vwapAnchor = chip.getAttribute("data-v");
+    applyVwapAnchorUI();
+    updateVwap();
+    saveSettings();
+  });
+});
+
+/* ---- Panel de ajustes de Soporte y Resistencia ---- */
+const srOnToggleEl = el("srOnToggle");
+srOnToggleEl.classList.toggle("on", state.srOn);
+srOnToggleEl.addEventListener("click", ()=>{
+  state.srOn = !state.srOn;
+  srOnToggleEl.classList.toggle("on", state.srOn);
+  updateSR();
+  saveSettings();
+});
+
+const srStrengthEls = [el("srStrength3"), el("srStrength5"), el("srStrength8")];
+function applySrStrengthUI(){
+  const active = srStrengthEls.find(c=>parseInt(c.getAttribute("data-v"),10) === state.srStrength) || srStrengthEls[1];
+  setActiveChip(srStrengthEls, active);
+}
+srStrengthEls.forEach(chip=>{
+  chip.addEventListener("click", ()=>{
+    state.srStrength = parseInt(chip.getAttribute("data-v"), 10);
+    applySrStrengthUI();
+    updateSR();
+    saveSettings();
+  });
+});
+applySrStrengthUI();
+
+const srLookbackEls = [el("srLookback150"), el("srLookback300"), el("srLookback600")];
+function applySrLookbackUI(){
+  const active = srLookbackEls.find(c=>parseInt(c.getAttribute("data-v"),10) === state.srLookback) || srLookbackEls[1];
+  setActiveChip(srLookbackEls, active);
+}
+srLookbackEls.forEach(chip=>{
+  chip.addEventListener("click", ()=>{
+    state.srLookback = parseInt(chip.getAttribute("data-v"), 10);
+    applySrLookbackUI();
+    updateSR();
+    saveSettings();
+  });
+});
+applySrLookbackUI();
+applyVwapAnchorUI();
+
+function setActiveChip(chips, activeChip){
+  chips.forEach(c=>c.classList.remove("active"));
+  activeChip.classList.add("active");
+}
+
+const chBaseIntervalSelEl = el("chBaseIntervalSel");
+chBaseIntervalSelEl.value = state.chBaseInterval;
+chBaseIntervalSelEl.addEventListener("change", ()=>{
+  state.chBaseInterval = chBaseIntervalSelEl.value;
+  saveSettings();
+  loadRegressionChannels().catch(err=>console.warn("channel settings update failed", err));
+});
+
+const chWidthStdEl = el("chWidthStd"), chWidthExtEl = el("chWidthExt");
+function applyWidthModeUI(){
+  setActiveChip([chWidthStdEl, chWidthExtEl], state.chWidthMode === "extreme" ? chWidthExtEl : chWidthStdEl);
+  const showStd = state.chWidthMode !== "extreme";
+  el("chStdMultRow").style.display = showStd ? "flex" : "none";
+  el("chStdMult").style.display = showStd ? "block" : "none";
+}
+[chWidthStdEl, chWidthExtEl].forEach(chip=>{
+  chip.addEventListener("click", ()=>{
+    state.chWidthMode = chip.getAttribute("data-v");
+    applyWidthModeUI();
+    saveSettings();
+    loadRegressionChannels().catch(err=>console.warn("channel settings update failed", err));
+  });
+});
+applyWidthModeUI();
+
+const chStdMultEl = el("chStdMult");
+chStdMultEl.value = Math.round(state.chStdMult*10);
+el("chStdMultVal").textContent = state.chStdMult.toFixed(1)+"×";
+chStdMultEl.addEventListener("input", ()=>{
+  state.chStdMult = parseInt(chStdMultEl.value, 10)/10;
+  el("chStdMultVal").textContent = state.chStdMult.toFixed(1)+"×";
+});
+chStdMultEl.addEventListener("change", ()=>{
+  saveSettings();
+  loadRegressionChannels().catch(err=>console.warn("channel settings update failed", err));
+});
+
+const chBlockAutoEl = el("chBlockAuto"), chBlockManualEl = el("chBlockManual");
+function applyBlockModeUI(){
+  setActiveChip([chBlockAutoEl, chBlockManualEl], state.chBlockMode === "manual" ? chBlockManualEl : chBlockAutoEl);
+  const showManual = state.chBlockMode === "manual";
+  el("chBlockSizeRow").style.display = showManual ? "flex" : "none";
+  el("chBlockSize").style.display = showManual ? "block" : "none";
+}
+[chBlockAutoEl, chBlockManualEl].forEach(chip=>{
+  chip.addEventListener("click", ()=>{
+    state.chBlockMode = chip.getAttribute("data-v");
+    applyBlockModeUI();
+    saveSettings();
+    loadRegressionChannels().catch(err=>console.warn("channel settings update failed", err));
+  });
+});
+applyBlockModeUI();
+
+const chBlockSizeEl = el("chBlockSize");
+chBlockSizeEl.value = state.chManualBlockSize;
+el("chBlockSizeVal").textContent = state.chManualBlockSize;
+chBlockSizeEl.addEventListener("input", ()=>{
+  state.chManualBlockSize = parseInt(chBlockSizeEl.value, 10);
+  el("chBlockSizeVal").textContent = state.chManualBlockSize;
+});
+chBlockSizeEl.addEventListener("change", ()=>{
+  saveSettings();
+  loadRegressionChannels().catch(err=>console.warn("channel settings update failed", err));
+});
+
+const chRevThEl = el("chRevTh");
+chRevThEl.value = Math.round(state.chReversalThreshold*100);
+el("chRevThVal").textContent = state.chReversalThreshold.toFixed(2)+"%/día";
+chRevThEl.addEventListener("input", ()=>{
+  state.chReversalThreshold = parseInt(chRevThEl.value, 10)/100;
+  el("chRevThVal").textContent = state.chReversalThreshold.toFixed(2)+"%/día";
+  applyReversalMarker(); // instantáneo, no necesita volver a pedir datos
+});
+chRevThEl.addEventListener("change", saveSettings);
+
+function buildTfButtons(){
+  const group = el("tfGroup");
+  group.innerHTML = "";
+  TIMEFRAMES.forEach(tf=>{
+    const btn = document.createElement("button");
+    btn.className = "tf-btn" + (tf.value === state.interval ? " active" : "");
+    btn.textContent = tf.label;
+    btn.addEventListener("click", ()=>{
+      state.interval = tf.value;
+      [...group.children].forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      loadMainChart();
+      saveSettings();
+    });
+    group.appendChild(btn);
+  });
+}
+
+function selectCoin(coin){
+  closeWatchlist();
+  if(!coin || coin === state.coin) return;
+  state.coin = coin;
+  el("symName").innerHTML = coin + " <small>USD Perp</small>";
+  renderWatchlist(el("wlSearch").value);
+  loadMainChart();
+  loadRegressionChannels();
+  saveSettings();
+}
+
+function openWatchlist(){
+  el("watchlist").classList.add("open");
+  el("wlBackdrop").classList.add("show");
+}
+function closeWatchlist(){
+  el("watchlist").classList.remove("open");
+  el("wlBackdrop").classList.remove("show");
+}
+function toggleWatchlist(){
+  const isOpen = el("watchlist").classList.contains("open");
+  isOpen ? closeWatchlist() : openWatchlist();
+}
+
+let pollTimeoutId = null;
+let pollInFlight = false;
+let cycle = 0;
+let liveFails = 0, regFails = 0, wlFails = 0;
+let lastLiveSuccessMs = Date.now(); // marca de tiempo del último refresco de velas realmente exitoso
+const CYCLES_PER_WATCHLIST = Math.max(1, Math.round(WATCHLIST_POLL_MS / LIVE_POLL_MS));
+const CYCLES_PER_REGRESSION = Math.max(1, Math.round(REGRESSION_POLL_MS / LIVE_POLL_MS));
+
+function backoffDelay(base, fails){
+  return Math.min(base * Math.pow(1.7, fails), MAX_BACKOFF_MS);
+}
+
+// Un único bucle secuencial: nunca hay más de una petición en vuelo a la vez.
+// En una conexión lenta, disparar 3 peticiones en paralelo (vela viva, canales, lista)
+// hace que se pisen el ancho de banda entre sí y todas terminen en timeout — por eso
+// se turnan una detrás de otra en vez de usar 3 temporizadores independientes.
+async function pollCycle(){
+  clearTimeout(pollTimeoutId);
+  if(pollInFlight) return; // ya hay un ciclo en curso; no arrancar uno en paralelo
+  pollInFlight = true;
+  try{
+    if(state.running){
+      if(state.autoRefresh){
+        try{ await updateLiveCandle(); liveFails = 0; }
+        catch(err){ liveFails++; console.warn("live update failed", err); }
+      }
+      cycle++;
+      if(cycle % CYCLES_PER_WATCHLIST === 0){
+        try{ await refreshWatchlistData(); wlFails = 0; }
+        catch(err){ wlFails++; console.warn("watchlist refresh failed", err); }
+      }
+      if(cycle % CYCLES_PER_REGRESSION === 0){
+        try{ await loadRegressionChannels(); regFails = 0; }
+        catch(err){ regFails++; console.warn("regression update failed", err); }
+      }
+      if(state.autoRefresh){
+        setStatus(liveFails >= 2 ? "Conexión lenta, reintentando…" : "En vivo");
+      }
+    }
+  } finally {
+    pollInFlight = false;
+  }
+  const delay = state.autoRefresh ? backoffDelay(LIVE_POLL_MS, liveFails) : LIVE_POLL_MS;
+  pollTimeoutId = setTimeout(pollCycle, delay);
+}
+
+function startLoops(){
+  state.running = true;
+  cycle = 0;
+  pollCycle();
+  connectWS();
+}
+
+// En móvil, el navegador suspende o retrasa mucho los temporizadores mientras la
+// pestaña/app está en segundo plano (pantalla bloqueada, cambio de app, etc.).
+// Al volver, el setTimeout pendiente puede tardar en dispararse o llegar con datos
+// viejos — por eso, en cuanto la página vuelve a ser visible o recupera conexión,
+// forzamos un resincronizado inmediato en vez de esperar al próximo ciclo.
+function forceResync(reason){
+  if(!state.running) return;
+  liveFails = 0; regFails = 0; wlFails = 0;
+  clearTimeout(pollTimeoutId);
+  pollCycle();
+  // Al volver de segundo plano el navegador suele cerrar los sockets inactivos:
+  // si el WebSocket ya no está abierto, forzamos una reconexión inmediata en vez
+  // de esperar a que le toque su turno en el backoff.
+  if(!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING){
+    clearTimeout(wsReconnectTimer);
+    wsReconnectDelay = 2000;
+    connectWS();
+  }
+}
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState === "visible") forceResync("visibility");
+});
+window.addEventListener("focus", ()=> forceResync("focus"));
+window.addEventListener("online", ()=> forceResync("online"));
+window.addEventListener("pageshow", (e)=>{
+  if(e.persisted) forceResync("bfcache");
+});
+
+el("refreshBtn").addEventListener("click", async (e)=>{
+  const btn = e.currentTarget;
+  btn.classList.add("spinning");
+  try{
+    await loadMainChart();
+    await loadRegressionChannels();
+    await refreshWatchlistData();
+  } catch(err){
+    console.warn("manual refresh error", err);
+    showError("No se pudo actualizar por completo. Intenta de nuevo.");
+  }
+  btn.classList.remove("spinning");
+  // Un refresco manual también resincroniza el bucle de fondo: se limpian los
+  // contadores de fallos y se reprograma el próximo ciclo al cadencia normal
+  // (5s) en vez de dejarlo esperando en un backoff largo que venía arrastrando.
+  liveFails = 0; regFails = 0; wlFails = 0;
+  if(state.running){
+    clearTimeout(pollTimeoutId);
+    pollTimeoutId = setTimeout(pollCycle, LIVE_POLL_MS);
+  }
+});
+
+el("autoToggle").addEventListener("click", function(){
+  state.autoRefresh = !state.autoRefresh;
+  this.classList.toggle("on", state.autoRefresh);
+  el("liveDot").classList.toggle("live", state.autoRefresh);
+  if(state.autoRefresh){
+    setStatus("Tiempo real activado");
+    liveFails = 0;
+    clearTimeout(pollTimeoutId);
+    pollCycle();
+  } else {
+    setStatus("Tiempo real pausado");
+  }
+  saveSettings();
+});
+el("autoToggle").classList.toggle("on", state.autoRefresh);
+el("liveDot").classList.toggle("live", state.autoRefresh);
+
+el("toggleWlBtn").addEventListener("click", toggleWatchlist);
+el("wlCloseBtn").addEventListener("click", closeWatchlist);
+el("wlBackdrop").addEventListener("click", closeWatchlist);
+
+let searchTimer = null;
+el("wlSearch").addEventListener("input", (e)=>{
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(()=> renderWatchlist(e.target.value), 120);
+});
+
+/* ============================= COMPARTIR GRÁFICO =============================
+   Compone una captura del chart (velas, canales, VWAP), el mapa de liquidez y los
+   dibujos, le añade un pequeño watermark con el símbolo/temporalidad/precio y el
+   ícono de la app, y la comparte con el share sheet nativo (o la descarga si el
+   navegador no soporta compartir archivos). */
+const appLogoImg = new Image();
+appLogoImg.src = "./icons/icon-192.png";
+
+async function shareChart(){
+  const btn = el("shareBtn");
+  btn.classList.add("spinning");
+  try{
+    const shot = chart.takeScreenshot();
+    const outCanvas = document.createElement("canvas");
+    outCanvas.width = shot.width;
+    outCanvas.height = shot.height;
+    const ctx = outCanvas.getContext("2d");
+    ctx.drawImage(shot, 0, 0);
+    ctx.drawImage(liqCanvas, 0, 0, outCanvas.width, outCanvas.height);
+    ctx.drawImage(drawCanvas, 0, 0, outCanvas.width, outCanvas.height);
+
+    const pad = Math.round(outCanvas.width*0.014);
+    const title = state.coin + " · " + state.interval.toUpperCase() + " · Hyperliquid Perp";
+    ctx.textBaseline = "top";
+    ctx.font = "800 " + Math.max(14, Math.round(outCanvas.width*0.017)) + "px Inter, sans-serif";
+    ctx.fillStyle = "rgba(220,234,230,0.94)";
+    ctx.fillText(title, pad, pad);
+
+    if(state.lastCandle){
+      ctx.font = "700 " + Math.max(12, Math.round(outCanvas.width*0.013)) + "px 'JetBrains Mono', monospace";
+      ctx.fillStyle = "#97FCE4";
+      ctx.fillText(fmtPrice(state.lastCandle.close), pad, pad + Math.round(outCanvas.width*0.022));
+    }
+
+    if(appLogoImg.complete && appLogoImg.naturalWidth){
+      const logoSize = Math.round(outCanvas.width*0.045);
+      ctx.globalAlpha = 0.92;
+      ctx.drawImage(appLogoImg, outCanvas.width-logoSize-pad, outCanvas.height-logoSize-pad, logoSize, logoSize);
+      ctx.globalAlpha = 1;
+    }
+
+    const blob = await new Promise(res => outCanvas.toBlob(res, "image/png"));
+    if(!blob) throw new Error("No se pudo generar la imagen");
+    const fileName = `${state.coin}_${state.interval}_${Date.now()}.png`;
+    const file = new File([blob], fileName, {type:"image/png"});
+
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({ files:[file], title, text: "Gráfico "+title });
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = fileName;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 4000);
+      setStatus("Imagen del gráfico descargada");
+    }
+  } catch(err){
+    if(err && err.name === "AbortError") { /* usuario cerró el share sheet: no es un error */ }
+    else { console.error(err); showError("No se pudo generar la imagen para compartir."); }
+  } finally {
+    btn.classList.remove("spinning");
+  }
+}
+el("shareBtn").addEventListener("click", shareChart);
+
+/* ============================= INIT ============================= */
+async function init(){
+  buildTfButtons();
+  el("symName").innerHTML = state.coin + " <small>USD Perp</small>";
+  setLoading(true);
+  setStatus("Conectando con Hyperliquid…");
+  try{
+    await refreshWatchlistData();
+    if(!state.universe.find(u=>u.name === state.coin) && state.universe.length){
+      state.coin = state.universe[0].name;
+      el("symName").innerHTML = state.coin + " <small>USD Perp</small>";
+    }
+    renderWatchlist("");
+    await loadMainChart();
+    await loadRegressionChannels();
+    updateTickerFromCtx();
+    startLoops();
+  } catch(err){
+    console.error(err);
+    showError("Error al conectar con la API de Hyperliquid. Revisa tu conexión e intenta 'Actualizar'.");
+    setStatus("Error de conexión");
+    setLoading(false);
+  }
+}
+
+init();
+
+})();
+</script>
+<script>
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js').catch((err) => {
+        console.warn('No se pudo registrar el service worker', err);
+      });
+    });
+  }
+</script>
+</body>
+</html>
