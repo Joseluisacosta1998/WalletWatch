@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>WhaleWatch — Monitor de Wallets Hyperliquid</title>
+<meta name="description" content="Monitorea wallets de Hyperliquid: posiciones abiertas, balance, PnL, riesgo de liquidación y un gráfico bajo demanda de los activos que tienen posiciones abiertas.">
+
+<!-- PWA -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#07100f">
+<meta name="background-color" content="#07100f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="WhaleWatch">
+<link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root{
+    --bg:#07100f;
+    --bg-panel:#0c1917;
+    --bg-panel-2:#0f1d1b;
+    --border:rgba(151,252,228,0.09);
+    --border-strong:rgba(151,252,228,0.18);
+    --mint:#5FE3B8;
+    --mint-bright:#97FCE4;
+    --mint-dim:rgba(95,227,184,0.35);
+    --red:#FF6B6B;
+    --red-dim:rgba(255,107,107,0.35);
+    --gold:#F5D76E;
+    --text:#DCEAE6;
+    --text-dim:#7C958E;
+    --text-faint:#4C625D;
+    --mono:'JetBrains Mono', monospace;
+    --sans:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;padding:0;height:100%;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    overflow:hidden;
+  }
+  #app{
+    display:flex;
+    flex-direction:column;
+    height:100vh;
+    height:100dvh;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+
+  /* ---------- TOP BAR ---------- */
+  .topbar{
+    display:flex;align-items:center;gap:14px;padding:12px 16px;
+    background:linear-gradient(180deg, var(--bg-panel-2), var(--bg-panel));
+    border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;
+  }
+  .brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:16px;letter-spacing:.2px;color:var(--mint-bright);}
+  .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--mint);box-shadow:0 0 8px var(--mint);}
+  .brand .dot.live{animation:pulse 1.6s infinite;}
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 var(--mint-dim);}
+    70%{box-shadow:0 0 0 7px rgba(95,227,184,0);}
+    100%{box-shadow:0 0 0 0 rgba(95,227,184,0);}
+  }
+  .brand small{display:block;font-size:10px;font-weight:600;color:var(--text-faint);letter-spacing:.03em;margin-top:1px;}
+  .topbar-status{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);flex:1;min-width:120px;}
+  .topbar-right{display:flex;align-items:center;gap:10px;}
+  .icon-btn{
+    display:flex;align-items:center;gap:6px;background:var(--bg-panel);border:1px solid var(--border);
+    color:var(--text-dim);padding:8px 12px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;
+    font-family:var(--sans);
+  }
+  .icon-btn:active{border-color:var(--border-strong);color:var(--mint-bright);background:var(--bg-panel-2);}
+  .toggle{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--text-dim);cursor:pointer;user-select:none;}
+  .toggle .switch{width:30px;height:16px;border-radius:9px;background:#1c2c29;position:relative;transition:.2s;border:1px solid var(--border);flex-shrink:0;}
+  .toggle .switch::after{content:'';position:absolute;top:1px;left:1px;width:12px;height:12px;border-radius:50%;background:var(--text-faint);transition:.2s;}
+  .toggle.on .switch{background:rgba(95,227,184,0.18);border-color:var(--mint-dim);}
+  .toggle.on .switch::after{transform:translateX(14px);background:var(--mint);}
+  @media (max-width:640px){ .toggle-label{display:none;} }
+
+  /* ---------- SUB-TABS ---------- */
+  .wsub-tabs{display:flex;gap:6px;padding:12px 16px 0;flex-shrink:0;}
+  .wsub-tab{
+    background:var(--bg-panel);border:1px solid var(--border);border-bottom:none;color:var(--text-dim);
+    font-size:12.5px;font-weight:700;padding:9px 16px;border-radius:9px 9px 0 0;cursor:pointer;font-family:var(--sans);
+  }
+  .wsub-tab.active{background:var(--bg-panel-2);color:var(--mint);border-color:var(--border-strong);}
+  .wsub-page{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-height:0;background:var(--bg-panel-2);}
+
+  /* ---------- WALLET ADD / LIST ---------- */
+  .wallet-add{display:flex;flex-wrap:wrap;gap:8px;}
+  .wallet-add input{
+    background:var(--bg-panel);border:1px solid var(--border);color:var(--text);
+    border-radius:7px;padding:10px 11px;font-size:12.5px;font-family:var(--mono);outline:none;min-width:0;
+  }
+  .wallet-add input#walletAddrInput{flex:2 1 260px;}
+  .wallet-add input#walletNameInput{flex:1 1 130px;}
+  .wallet-add input:focus{border-color:var(--mint-dim);}
+  .wallet-add button{
+    background:var(--mint);color:#04211a;border:none;border-radius:7px;padding:10px 16px;
+    font-size:12.5px;font-weight:800;cursor:pointer;font-family:var(--sans);white-space:nowrap;
+  }
+  .wallets-add-status{font-size:11px;color:var(--text-faint);font-family:var(--mono);min-height:14px;}
+  .wallets-add-status.err{color:var(--red);}
+  .wallets-add-status.ok{color:var(--mint);}
+  .wallets-empty-hint{font-size:12px;color:var(--text-faint);padding:6px 2px;}
+
+  .wallets-list{display:flex;flex-direction:column;gap:8px;}
+  .wallet-chip{
+    display:flex;align-items:center;gap:10px;background:var(--bg-panel);border:1px solid var(--border);
+    border-radius:10px;padding:9px 10px 9px 12px;font-size:11.5px;color:var(--text);cursor:pointer;
+  }
+  .wallet-chip:active{background:var(--bg-panel-2);}
+  .wallet-chip .wc-id{display:flex;align-items:center;gap:7px;flex-shrink:0;min-width:0;}
+  .wallet-chip .wc-dot{width:6px;height:6px;border-radius:50%;background:var(--mint);flex-shrink:0;}
+  .wallet-chip .wc-dot.err{background:var(--red);}
+  .wallet-chip .wc-name{font-weight:700;white-space:nowrap;}
+  .wallet-chip .wc-addr{font-family:var(--mono);color:var(--text-faint);font-size:10px;white-space:nowrap;}
+  .wallet-chip .wc-stats{flex:1;display:flex;gap:12px;justify-content:flex-end;overflow:hidden;}
+  .wallet-chip .wc-stat-item{display:flex;flex-direction:column;align-items:flex-end;line-height:1.3;flex-shrink:0;}
+  .wallet-chip .wc-stat-item .lbl{font-size:8px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-faint);}
+  .wallet-chip .wc-stat-item .val{font-family:var(--mono);font-size:11px;font-weight:800;color:var(--text);}
+  .wallet-chip .wc-stat-item .val.wt-pos{color:var(--mint);}
+  .wallet-chip .wc-stat-item .val.wt-neg{color:var(--red);}
+  .wallet-chip .wc-actions{display:flex;gap:6px;flex-shrink:0;}
+  .wallet-chip .wc-edit{
+    width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:rgba(151,252,228,0.12);color:var(--mint);cursor:pointer;font-size:10px;flex-shrink:0;
+  }
+  .wallet-chip .wc-x{
+    width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:rgba(255,107,107,0.12);color:var(--red);cursor:pointer;font-size:12px;line-height:1;flex-shrink:0;
+  }
+
+  /* ---------- POSICIONES ---------- */
+  .wallet-filter{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .wallet-filter select{
+    background:var(--bg-panel);border:1px solid var(--border);color:var(--text);
+    border-radius:7px;padding:9px 10px;font-size:12.5px;font-family:var(--sans);outline:none;cursor:pointer;
+  }
+  .wallet-filter button{
+    background:var(--bg-panel);color:var(--text-dim);border:1px solid var(--border);padding:9px 12px;
+    border-radius:7px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--sans);white-space:nowrap;
+  }
+  .wallet-filter button.primary{background:var(--mint);color:#04211a;border-color:var(--mint);}
+  .wallet-filter .spacer{flex:1;}
+  .wallets-table-wrap{
+    flex:1;overflow:auto;border:1px solid var(--border);border-radius:10px;background:var(--bg-panel);min-height:0;
+  }
+  table.wallets-table{width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap;}
+  table.wallets-table thead th{
+    position:sticky;top:0;background:var(--bg-panel-2);color:var(--text-faint);
+    text-transform:uppercase;letter-spacing:.05em;font-size:10px;font-weight:700;
+    text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);
+  }
+  table.wallets-table td{padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text);}
+  table.wallets-table tbody tr:last-child td{border-bottom:none;}
+  table.wallets-table tbody tr:hover{background:rgba(151,252,228,0.03);}
+  table.wallets-table td.wt-pos{color:var(--mint);}
+  table.wallets-table td.wt-neg{color:var(--red);}
+  .wallets-empty{text-align:center;color:var(--text-faint);padding:28px 12px !important;white-space:normal;}
+  .side-badge{
+    display:inline-block;padding:2px 8px;border-radius:5px;font-size:10.5px;font-weight:800;
+    font-family:var(--mono);letter-spacing:.03em;
+  }
+  .side-badge.long{background:rgba(95,227,184,0.14);color:var(--mint);}
+  .side-badge.short{background:rgba(255,107,107,0.14);color:var(--red);}
+  .wt-mono{font-family:var(--mono);}
+  .wt-lev{font-family:var(--mono);font-size:10.5px;padding:1px 6px;border-radius:4px;margin-left:6px;}
+  .liq-risk{padding:2px 8px;border-radius:5px;font-weight:800;}
+  tr.wt-stale{opacity:0.6;}
+  .wt-stale-dot{color:var(--gold);font-size:8px;vertical-align:middle;}
+  .wallets-status{font-size:11px;color:var(--text-faint);font-family:var(--mono);}
+
+  /* ---------- LIQUIDADAS ---------- */
+  .wallets-liq-hint{font-size:11.5px;color:var(--text-faint);flex:1;}
+  #walletsLiqClearBtn{background:rgba(255,107,107,0.12);color:var(--red);border:1px solid rgba(255,107,107,0.3);}
+  .wallets-liq-history{display:flex;flex-direction:column;gap:8px;padding:10px;}
+  .wlh-row{
+    display:flex;align-items:center;gap:10px;background:var(--bg-panel);border:1px solid var(--border);
+    border-radius:9px;padding:10px 12px;font-size:11.5px;
+  }
+  .wlh-icon{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;background:rgba(255,107,107,0.14);color:var(--red);}
+  .wlh-body{flex:1;min-width:0;}
+  .wlh-title{font-weight:700;color:var(--text);}
+  .wlh-sub{color:var(--text-faint);font-family:var(--mono);font-size:10.5px;margin-top:2px;}
+  .wlh-time{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);white-space:nowrap;text-align:right;flex-shrink:0;}
+
+  /* ---------- MODALES (detalle de wallet / gráfico) ---------- */
+  .sheet-backdrop{
+    position:fixed;inset:0;background:rgba(3,10,9,0.72);z-index:60;
+    display:none;align-items:flex-end;justify-content:center;
+  }
+  .sheet{
+    width:100%;max-width:680px;max-height:88vh;background:var(--bg-panel-2);border:1px solid var(--border-strong);
+    border-radius:16px 16px 0 0;display:flex;flex-direction:column;overflow:hidden;
+  }
+  @media (min-width:700px){
+    .sheet-backdrop{align-items:center;}
+    .sheet{border-radius:16px;max-height:82vh;}
+  }
+  .sheet-head{display:flex;align-items:flex-start;justify-content:space-between;padding:16px;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .sheet-title{font-size:16px;font-weight:800;color:var(--text);}
+  .sheet-subtitle{font-family:var(--mono);font-size:11px;color:var(--text-faint);margin-top:2px;}
+  .sheet-close{background:var(--bg-panel);border:1px solid var(--border);color:var(--text-dim);width:30px;height:30px;border-radius:50%;font-size:14px;cursor:pointer;flex-shrink:0;}
+
+  .wallet-modal-summary{display:flex;gap:22px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .wm-stat{display:flex;flex-direction:column;gap:2px;}
+  .wm-stat .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint);}
+  .wm-stat .val{font-family:var(--mono);font-size:15px;font-weight:800;color:var(--text);}
+  .sheet-section-title{
+    font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint);font-weight:700;
+    padding:12px 16px 6px;flex-shrink:0;
+  }
+  .wallet-modal-positions{padding:0 16px 16px;display:flex;flex-direction:column;gap:8px;flex:1;overflow-y:auto;min-height:0;}
+  .wm-pos-row{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--bg-panel);
+    border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px;flex-wrap:wrap;
+  }
+
+  /* ---------- PANEL DE GRÁFICO ---------- */
+  .chart-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .chart-controls select{
+    background:var(--bg-panel);border:1px solid var(--border);color:var(--text);
+    border-radius:7px;padding:8px 10px;font-size:12px;font-family:var(--sans);outline:none;cursor:pointer;
+  }
+  .cm-tf-row{display:flex;gap:4px;flex-wrap:wrap;}
+  .cm-tf-btn{
+    background:var(--bg-panel);border:1px solid var(--border);color:var(--text-dim);
+    padding:7px 10px;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:var(--mono);
+  }
+  .cm-tf-btn.active{background:var(--mint);color:#04211a;border-color:var(--mint);}
+  .chart-controls .spacer{flex:1;}
+  .chart-controls button.refresh-btn{
+    background:var(--bg-panel);border:1px solid var(--border);color:var(--mint);
+    padding:8px 12px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);
+  }
+  .chart-note{font-size:10.5px;color:var(--text-faint);padding:0 16px;flex-shrink:0;font-family:var(--mono);}
+  .chart-body-wrap{flex:1;position:relative;min-height:280px;background:var(--bg);}
+  #miniChart{position:absolute;inset:0;}
+  #chartLiqCanvas{position:absolute;inset:0;pointer-events:none;}
+  .chart-empty{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:var(--text-faint);font-size:12.5px;text-align:center;padding:20px;
+  }
+  .chart-loading{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(7,16,15,0.55);color:var(--text-dim);font-size:12px;font-family:var(--mono);
+  }
+  .chart-loading.show{display:flex;}
+  .chart-legend{display:flex;gap:14px;padding:10px 16px;flex-wrap:wrap;border-top:1px solid var(--border);flex-shrink:0;}
+  .chart-legend div{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--text-dim);}
+  .chart-legend .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="topbar">
+    <div class="brand"><span class="dot live"></span>WHALEWATCH<small>Monitor de wallets · Hyperliquid</small></div>
+    <div class="topbar-status" id="topbarStatus"></div>
+    <div class="topbar-right">
+      <div class="toggle on" id="autoToggle" title="Actualización automática de wallets">
+        <div class="switch"></div><span class="toggle-label">Auto</span>
+      </div>
+      <div class="icon-btn" id="refreshAllBtn">⟳ <span class="toggle-label">Actualizar</span></div>
+    </div>
+  </div>
+
+  <div class="wsub-tabs">
+    <button type="button" class="wsub-tab active" id="wsubManageBtn" data-wsub="manage">Wallets</button>
+    <button type="button" class="wsub-tab" id="wsubPositionsBtn" data-wsub="positions">Posiciones</button>
+    <button type="button" class="wsub-tab" id="wsubLiquidatedBtn" data-wsub="liquidated">Liquidadas</button>
+  </div>
+
+  <div class="wsub-page" id="wsubPageManage">
+    <div class="wallet-add">
+      <input type="text" id="walletAddrInput" placeholder="Dirección de wallet 0x…" autocomplete="off" spellcheck="false">
+      <input type="text" id="walletNameInput" placeholder="Nombre (opcional)" autocomplete="off">
+      <button type="button" id="walletAddBtn">+ Añadir wallet</button>
+    </div>
+    <div class="wallets-add-status" id="walletsAddStatus"></div>
+    <div class="wallets-list" id="walletsList">
+      <div class="wallets-empty-hint">Añade una dirección de Hyperliquid para empezar a monitorearla. Los nombres que le pongas se guardan en este dispositivo.</div>
+    </div>
+  </div>
+
+  <div class="wsub-page" id="wsubPagePositions" style="display:none;">
+    <div class="wallet-filter">
+      <select id="walletAssetFilter"><option value="">Todos los activos</option></select>
+      <button type="button" id="walletRefreshBtn">⟳ Actualizar</button>
+      <div class="spacer"></div>
+      <button type="button" id="sharePositionsBtn">🔗 Compartir</button>
+      <button type="button" class="primary" id="openChartBtn">📈 Gráfico</button>
+    </div>
+    <div class="wallets-table-wrap">
+      <table class="wallets-table">
+        <thead>
+          <tr><th>Wallet</th><th>Activo</th><th>Dirección</th><th>Entrada</th><th>Nocional</th><th>PnL</th><th>Balance</th><th>Liquidación</th></tr>
+        </thead>
+        <tbody id="walletsTableBody">
+          <tr><td colspan="8" class="wallets-empty">Sin wallets monitoreadas todavía.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="wallets-status" id="walletsStatus"></div>
+  </div>
+
+  <div class="wsub-page" id="wsubPageLiquidated" style="display:none;">
+    <div class="wallet-filter">
+      <span class="wallets-liq-hint">Wallets monitoreadas que fueron liquidadas (detectado automáticamente).</span>
+      <button type="button" id="walletsLiqClearBtn">🗑 Eliminar historial</button>
+    </div>
+    <div class="wallets-table-wrap">
+      <div id="walletsLiqHistoryList" class="wallets-liq-history"></div>
+    </div>
+  </div>
+
+  <!-- ---- Detalle de wallet ---- -->
+  <div class="sheet-backdrop" id="walletModalBackdrop">
+    <div class="sheet" id="walletModal">
+      <div class="sheet-head">
+        <div>
+          <div class="sheet-title" id="wmTitle">Wallet</div>
+          <div class="sheet-subtitle" id="wmAddr"></div>
+        </div>
+        <button type="button" class="sheet-close" id="wmCloseBtn">✕</button>
+      </div>
+      <div class="wallet-modal-summary" id="wmSummary"></div>
+      <div class="sheet-section-title">Posiciones abiertas</div>
+      <div class="wallet-modal-positions" id="wmPositions"></div>
+    </div>
+  </div>
+
+  <!-- ---- Panel de gráfico ---- -->
+  <div class="sheet-backdrop" id="chartModalBackdrop">
+    <div class="sheet" id="chartModal" style="height:88vh;">
+      <div class="sheet-head">
+        <div>
+          <div class="sheet-title" id="cmTitle">Gráfico</div>
+          <div class="sheet-subtitle">Solo activos con posiciones abiertas en tus wallets monitoreadas</div>
+        </div>
+        <button type="button" class="sheet-close" id="cmCloseBtn">✕</button>
+      </div>
+      <div class="chart-controls">
+        <select id="chartAssetSelect"></select>
+        <div class="cm-tf-row" id="chartTfRow"></div>
+        <div class="spacer"></div>
+        <button type="button" class="refresh-btn" id="shareChartBtn" title="Compartir imagen del gráfico">🔗</button>
+        <button type="button" class="refresh-btn" id="chartRefreshBtn">⟳</button>
+      </div>
+      <div class="chart-note" id="chartNote">Se actualiza cada pocos minutos (no en vivo). Usa ⟳ para forzar una actualización.</div>
+      <div class="chart-body-wrap" id="chartBodyWrap">
+        <div id="miniChart"></div>
+        <canvas id="chartLiqCanvas"></canvas>
+        <div class="chart-empty" id="chartEmpty" style="display:none;">Ninguna wallet monitoreada tiene posiciones abiertas todavía.</div>
+        <div class="chart-loading" id="chartLoading">Cargando velas…</div>
+      </div>
+      <div class="chart-legend">
+        <div><span class="dot" style="background:#5FE3B8"></span> Liquidación ≤ 3×</div>
+        <div><span class="dot" style="background:#F5D76E"></span> 3× – 10×</div>
+        <div><span class="dot" style="background:#FF9F45"></span> 10× – 25×</div>
+        <div><span class="dot" style="background:#FF6B6B"></span> &gt; 25×</div>
+      </div>
+      <div class="chart-legend" style="padding-top:0;">
+        <div>▭ Banda fuerte = nivel real de una posición abierta</div>
+        <div>▭ Banda tenue = ya fue liquidada ahí</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================= CONFIG ============================= */
+const API = "https://api.hyperliquid.xyz/info";
+const TIMEFRAMES = [
+  {label:"1m", value:"1m"}, {label:"5m", value:"5m"}, {label:"15m", value:"15m"},
+  {label:"30m", value:"30m"}, {label:"1h", value:"1h"}, {label:"4h", value:"4h"},
+  {label:"1D", value:"1d"}, {label:"1S", value:"1w"}
+];
+const INTERVAL_MS = {
+  "1m":60e3, "5m":300e3, "15m":900e3, "30m":1800e3,
+  "1h":3600e3, "4h":14400e3, "1d":86400e3, "1w":604800e3
+};
+const CHART_CANDLE_COUNT = 300;
+const CHART_AUTO_REFRESH_MS = 180000;  // el gráfico no es en vivo: se refresca cada 3 minutos
+const WALLET_POLL_MS = 20000;          // refresco de posiciones/wallets monitoreadas
+const MARKET_CTX_POLL_MS = 20000;      // refresco de precios de referencia (para riesgo de liquidación)
+const SETTINGS_KEY = "wwSettings_v1";
+const WALLETS_KEY = "wwMonitoredWallets_v1";
+const WALLET_POSITIONS_CACHE_KEY = "wwWalletPositionsCache_v1";
+const WALLET_LIQ_EVENTS_KEY = "wwWalletLiqEvents_v1";
+const LEV_BANDS = [
+  {max:3,   color:"#5FE3B8"},
+  {max:10,  color:"#F5D76E"},
+  {max:25,  color:"#FF9F45"},
+  {max:Infinity, color:"#FF6B6B"}
+];
+
+const el = (id) => document.getElementById(id);
+
+/* ============================= HELPERS ============================= */
+function fmtPrice(p){
+  if(p === null || p === undefined || isNaN(p)) return "—";
+  const abs = Math.abs(p);
+  if(abs === 0) return "0";
+  if(abs >= 1000) return p.toLocaleString("en-US",{maximumFractionDigits:2, minimumFractionDigits:2});
+  if(abs >= 1) return p.toLocaleString("en-US",{maximumFractionDigits:4, minimumFractionDigits:2});
+  if(abs >= 0.01) return p.toFixed(6);
+  return p.toPrecision(4);
+}
+function fmtUsd(v){
+  if(v === null || v === undefined || isNaN(v)) return "—";
+  const abs = Math.abs(v);
+  const sign = v < 0 ? "-" : "";
+  if(abs >= 1e9) return sign+"$"+(abs/1e9).toFixed(2)+"B";
+  if(abs >= 1e6) return sign+"$"+(abs/1e6).toFixed(2)+"M";
+  if(abs >= 1e3) return sign+"$"+(abs/1e3).toFixed(2)+"K";
+  return sign+"$"+abs.toFixed(2);
+}
+function nowSec(){ return Math.floor(Date.now()/1000); }
+function leverageColor(lev){
+  if(lev === null || lev === undefined || isNaN(lev)) return "#7C958E";
+  const band = LEV_BANDS.find(b => lev <= b.max);
+  return band ? band.color : "#FF6B6B";
+}
+function liqRiskColor(distPct){
+  if(distPct == null || isNaN(distPct)) return "#7C958E";
+  const capped = Math.max(0, Math.min(distPct, 25));
+  const hue = (capped/25) * 130;
+  return `hsl(${hue.toFixed(0)}, 82%, 56%)`;
+}
+
+async function apiPost(body, timeoutMs){
+  const ctrl = new AbortController();
+  const t = setTimeout(()=>ctrl.abort(), timeoutMs || 10000);
+  try{
+    const res = await fetch(API, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(body),
+      signal: ctrl.signal
+    });
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    return await res.json();
+  } finally {
+    clearTimeout(t);
+  }
+}
+function mapCandles(raw){
+  return raw.map(c=>({
+    time: Math.floor(c.t/1000),
+    open: parseFloat(c.o), high: parseFloat(c.h),
+    low: parseFloat(c.l), close: parseFloat(c.c),
+    volume: parseFloat(c.v)
+  })).sort((a,b)=>a.time-b.time);
+}
+async function fetchCandles(coin, interval, count, timeoutMs){
+  const ms = INTERVAL_MS[interval];
+  const endTime = Date.now();
+  const startTime = endTime - count*ms - ms;
+  const raw = await apiPost({type:"candleSnapshot", req:{coin, interval, startTime, endTime}}, timeoutMs);
+  return mapCandles(raw || []);
+}
+async function fetchMetaAndCtxs(timeoutMs){
+  const res = await apiPost({type:"metaAndAssetCtxs"}, timeoutMs);
+  return { universe: res[0].universe, ctxs: res[1] };
+}
+
+/* ============================= STATE ============================= */
+function loadWallets(){
+  try{
+    const raw = localStorage.getItem(WALLETS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch(e){ return []; }
+}
+function saveWallets(){
+  try{ localStorage.setItem(WALLETS_KEY, JSON.stringify(state.wallets)); }
+  catch(e){ /* almacenamiento no disponible */ }
+}
+function loadCachedWalletPositions(){
+  try{
+    const raw = localStorage.getItem(WALLET_POSITIONS_CACHE_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch(e){ return []; }
+}
+function saveCachedWalletPositions(){
+  try{ localStorage.setItem(WALLET_POSITIONS_CACHE_KEY, JSON.stringify(state.walletPositions)); }
+  catch(e){ /* almacenamiento no disponible */ }
+}
+function loadCachedWalletLiqEvents(){
+  try{
+    const raw = localStorage.getItem(WALLET_LIQ_EVENTS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch(e){ return []; }
+}
+function saveCachedWalletLiqEvents(){
+  try{ localStorage.setItem(WALLET_LIQ_EVENTS_KEY, JSON.stringify(state.walletLiqEvents)); }
+  catch(e){ /* almacenamiento no disponible */ }
+}
+function loadSettings(){
+  try{ const raw = localStorage.getItem(SETTINGS_KEY); return raw ? JSON.parse(raw) : null; }
+  catch(e){ return null; }
+}
+function saveSettings(){
+  try{
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+      autoRefresh: state.autoRefresh,
+      chartCoin: state.chartCoin,
+      chartInterval: state.chartInterval
+    }));
+  } catch(e){ /* almacenamiento no disponible */ }
+}
+const SAVED = loadSettings() || {};
+
+const state = {
+  wallets: [],
+  walletPositions: [],
+  walletAssetFilter: "",
+  walletLiqEvents: [],
+  walletsLoading: false,
+  autoRefresh: SAVED.autoRefresh !== undefined ? SAVED.autoRefresh : true,
+  universe: [],
+  assetCtxs: [],
+  chartCoin: SAVED.chartCoin || null,
+  chartInterval: SAVED.chartInterval || "15m"
+};
+state.wallets = loadWallets();
+state.walletPositions = loadCachedWalletPositions().filter(p => state.wallets.some(w => w.address === p.address));
+state.walletLiqEvents = loadCachedWalletLiqEvents();
+
+/* ============================= PRECIOS DE REFERENCIA ============================= */
+async function refreshMarketCtxs(){
+  try{
+    const {universe, ctxs} = await fetchMetaAndCtxs(15000);
+    state.universe = universe;
+    state.assetCtxs = ctxs;
+  } catch(e){ /* si falla, se sigue usando el último precio conocido */ }
+}
+function getMarkPrice(coin){
+  const idx = state.universe.findIndex(u => u.name === coin);
+  if(idx < 0) return null;
+  const ctx = state.assetCtxs[idx];
+  if(!ctx) return null;
+  const v = parseFloat(ctx.markPx);
+  return isNaN(v) ? null : v;
+}
+
+/* ============================= MONITOR DE WALLETS ============================= */
+function isValidHlAddress(addr){
+  return typeof addr === "string" && /^0x[0-9a-f]{40}$/i.test(addr.trim());
+}
+function normalizeAddr(addr){
+  return (addr||"").replace(/\s+/g,"").trim().toLowerCase();
+}
+function shortAddr(addr){
+  return addr.slice(0,6) + "…" + addr.slice(-4);
+}
+function walletLabel(w){
+  return (w.name && w.name.trim()) ? w.name.trim() : shortAddr(w.address);
+}
+function setWalletAddStatus(msg, kind){
+  const box = el("walletsAddStatus");
+  box.textContent = msg || "";
+  box.className = "wallets-add-status" + (kind ? " "+kind : "");
+}
+
+function addWalletEntry(address, name){
+  address = normalizeAddr(address);
+  if(!isValidHlAddress(address)){
+    setWalletAddStatus("Dirección inválida. Debe ser una dirección 0x de Hyperliquid (42 caracteres).", "err");
+    return false;
+  }
+  if(state.wallets.some(w => w.address === address)){
+    setWalletAddStatus("Esa wallet ya está siendo monitoreada — no se añadió duplicada.", "err");
+    return false;
+  }
+  state.wallets.push({ address, name: (name||"").trim() });
+  saveWallets();
+  renderWalletsChips();
+  setWalletAddStatus("Wallet añadida. Cargando sus posiciones…", "ok");
+  refreshAllWallets();
+  return true;
+}
+function removeWalletEntry(address){
+  state.wallets = state.wallets.filter(w => w.address !== address);
+  state.walletPositions = state.walletPositions.filter(p => p.address !== address);
+  saveWallets();
+  saveCachedWalletPositions();
+  renderWalletsChips();
+  renderWalletsTable();
+  populateWalletAssetFilter();
+  populateChartAssetOptions();
+}
+function renameWalletEntry(address, newName){
+  const w = state.wallets.find(w => w.address === address);
+  if(!w) return;
+  w.name = (newName||"").trim();
+  saveWallets();
+  renderWalletsChips();
+  renderWalletsTable();
+}
+
+async function fetchWalletState(address){
+  const data = await apiPost({ type:"clearinghouseState", user: address }, 12000);
+  const positions = Array.isArray(data && data.assetPositions) ? data.assetPositions : [];
+  const accountBalance = (data && data.marginSummary && data.marginSummary.accountValue !== undefined && data.marginSummary.accountValue !== null)
+    ? parseFloat(data.marginSummary.accountValue) : null;
+  const mapped = positions.map(ap=>{
+    const p = ap.position || {};
+    const szi = parseFloat(p.szi);
+    const lev = p.leverage && p.leverage.value !== undefined ? Number(p.leverage.value) : null;
+    return {
+      coin: p.coin,
+      side: szi >= 0 ? "long" : "short",
+      size: Math.abs(szi),
+      entryPx: p.entryPx !== undefined ? parseFloat(p.entryPx) : null,
+      notional: p.positionValue !== undefined ? Math.abs(parseFloat(p.positionValue)) : Math.abs(szi * parseFloat(p.entryPx || 0)),
+      pnl: p.unrealizedPnl !== undefined ? parseFloat(p.unrealizedPnl) : null,
+      liqPx: (p.liquidationPx !== undefined && p.liquidationPx !== null) ? parseFloat(p.liquidationPx) : null,
+      leverage: (lev === null || isNaN(lev)) ? null : lev,
+      leverageType: p.leverage ? p.leverage.type : null
+    };
+  }).filter(pos => pos.coin && pos.size > 0);
+  return { positions: mapped, accountBalance };
+}
+
+function detectWalletLiquidations(prevPositions, newPositions){
+  const newKeySet = new Set(newPositions.map(p => p.address+"|"+p.coin));
+  prevPositions.forEach(p=>{
+    if(newKeySet.has(p.address+"|"+p.coin)) return;
+    if(!p.liqPx) return;
+    const mark = getMarkPrice(p.coin);
+    if(mark == null) return;
+    const hit = p.side === "long" ? mark <= p.liqPx * 1.003 : mark >= p.liqPx * 0.997;
+    if(!hit) return;
+    const pctOfAccount = (p.accountBalance && p.accountBalance > 0) ? (p.notional / p.accountBalance * 100) : null;
+    state.walletLiqEvents.push({
+      time: nowSec(), coin: p.coin, price: p.liqPx, name: p.name,
+      side: p.side, leverage: p.leverage, address: p.address,
+      notional: p.notional, leverageType: p.leverageType,
+      accountBalance: p.accountBalance, pctOfAccount
+    });
+  });
+  if(state.walletLiqEvents.length > 300) state.walletLiqEvents = state.walletLiqEvents.slice(-300);
+}
+
+async function refreshAllWallets(){
+  await refreshMarketCtxs();
+  if(!state.wallets.length){
+    state.walletPositions = [];
+    renderWalletsTable();
+    populateWalletAssetFilter();
+    populateChartAssetOptions();
+    saveCachedWalletPositions();
+    el("walletsStatus").textContent = "";
+    setTopbarStatus();
+    return;
+  }
+  state.walletsLoading = true;
+  el("walletsStatus").textContent = "Actualizando posiciones…";
+  const prevPositions = state.walletPositions;
+  const results = await Promise.all(state.wallets.map(async (w)=>{
+    try{
+      const { positions, accountBalance } = await fetchWalletState(w.address);
+      w.error = false;
+      w.accountBalance = accountBalance;
+      w.totalPnl = positions.reduce((sum,p)=> sum + (p.pnl || 0), 0);
+      return positions.map(p => Object.assign({ address:w.address, name: walletLabel(w), accountBalance }, p));
+    } catch(err){
+      console.warn("wallet fetch failed", w.address, err);
+      w.error = true;
+      return prevPositions.filter(p => p.address === w.address).map(p => Object.assign({}, p, { stale: true }));
+    }
+  }));
+  const newPositions = results.flat();
+  detectWalletLiquidations(prevPositions, newPositions);
+  state.walletPositions = newPositions;
+  state.walletsLoading = false;
+  renderWalletsChips();
+  renderWalletsTable();
+  populateWalletAssetFilter();
+  populateChartAssetOptions();
+  saveCachedWalletPositions();
+  saveCachedWalletLiqEvents();
+  if(el("wsubPageLiquidated").style.display === "flex") renderWalletLiqHistory();
+  if(wmCurrentAddress){
+    const w = state.wallets.find(w=>w.address===wmCurrentAddress);
+    if(w){ renderWalletModalSummary(w); renderWalletModalPositions(wmCurrentAddress); }
+    else closeWalletDetail();
+  }
+  if(chartPanelOpen){ renderChartLiqOverlay(); updateChartMarkers(); }
+  const failCount = state.wallets.filter(w=>w.error).length;
+  el("walletsStatus").textContent = "Actualizado " + new Date().toLocaleTimeString() +
+    (failCount ? " · " + failCount + " wallet(s) con conexión lenta (mostrando último dato)" : "");
+  setTopbarStatus();
+}
+function setTopbarStatus(){
+  const n = state.wallets.length;
+  el("topbarStatus").textContent = n
+    ? n + " wallet" + (n===1?"":"s") + " monitoreada" + (n===1?"":"s") + " · " + new Date().toLocaleTimeString()
+    : "Sin wallets monitoreadas";
+}
+
+function renderWalletsChips(){
+  const wrap = el("walletsList");
+  if(!state.wallets.length){
+    wrap.innerHTML = '<div class="wallets-empty-hint">Añade una dirección de Hyperliquid para empezar a monitorearla. Los nombres que le pongas se guardan en este dispositivo.</div>';
+    return;
+  }
+  wrap.innerHTML = state.wallets.map(w=>{
+    const label = walletLabel(w).replace(/</g,"&lt;");
+    const balTxt = w.accountBalance != null ? fmtUsd(w.accountBalance) : "—";
+    const pnlVal = w.totalPnl;
+    const pnlCls = pnlVal > 0 ? "wt-pos" : (pnlVal < 0 ? "wt-neg" : "");
+    const pnlTxt = pnlVal != null ? (pnlVal>0?"+":"") + fmtUsd(pnlVal) : "—";
+    return `<div class="wallet-chip" data-addr="${w.address}">
+      <div class="wc-id">
+        <span class="wc-dot${w.error ? " err" : ""}"></span>
+        <span class="wc-name" data-addr="${w.address}">${label}</span>
+        <span class="wc-addr">${shortAddr(w.address)}</span>
+      </div>
+      <div class="wc-stats">
+        <div class="wc-stat-item"><span class="lbl">Balance</span><span class="val">${balTxt}</span></div>
+        <div class="wc-stat-item"><span class="lbl">PnL</span><span class="val ${pnlCls}">${pnlTxt}</span></div>
+      </div>
+      <div class="wc-actions">
+        <span class="wc-edit" data-addr="${w.address}" title="Renombrar wallet">✎</span>
+        <span class="wc-x" data-addr="${w.address}" title="Dejar de monitorear">×</span>
+      </div>
+    </div>`;
+  }).join("");
+  wrap.querySelectorAll(".wc-x").forEach(btn=>{
+    btn.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      const addr = btn.getAttribute("data-addr");
+      const w = state.wallets.find(w=>w.address===addr);
+      const label = w ? walletLabel(w) : shortAddr(addr);
+      if(confirm(`¿Eliminar la wallet "${label}" de tu monitoreo? Se dejarán de rastrear sus posiciones.`)){
+        removeWalletEntry(addr);
+      }
+    });
+  });
+  wrap.querySelectorAll(".wc-edit").forEach(btn=>{
+    btn.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      const addr = btn.getAttribute("data-addr");
+      const w = state.wallets.find(w=>w.address===addr);
+      const next = prompt("Nombre para esta wallet:", w && w.name ? w.name : "");
+      if(next !== null) renameWalletEntry(addr, next);
+    });
+  });
+  wrap.querySelectorAll(".wallet-chip").forEach(chip=>{
+    chip.addEventListener("click", ()=> openWalletDetail(chip.getAttribute("data-addr")));
+  });
+}
+
+function populateWalletAssetFilter(){
+  const sel = el("walletAssetFilter");
+  const coins = Array.from(new Set(state.walletPositions.map(p=>p.coin))).sort();
+  const current = state.walletAssetFilter;
+  sel.innerHTML = '<option value="">Todos los activos</option>' +
+    coins.map(c => `<option value="${c}"${c===current?" selected":""}>${c}</option>`).join("");
+  if(!coins.includes(current)) state.walletAssetFilter = "";
+}
+
+function renderWalletsTable(){
+  const body = el("walletsTableBody");
+  let rows = state.walletPositions.slice();
+  if(state.walletAssetFilter) rows = rows.filter(p => p.coin === state.walletAssetFilter);
+  rows.sort((a,b)=>{
+    const ba = a.accountBalance == null ? -Infinity : a.accountBalance;
+    const bb = b.accountBalance == null ? -Infinity : b.accountBalance;
+    if(bb !== ba) return bb - ba;
+    if(a.address !== b.address) return a.address < b.address ? -1 : 1;
+    return b.notional - a.notional;
+  });
+  if(!rows.length){
+    body.innerHTML = `<tr><td colspan="8" class="wallets-empty">${
+      state.wallets.length ? "No hay posiciones abiertas para este filtro." : "Sin wallets monitoreadas todavía."
+    }</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map(p=>{
+    const pnlClass = p.pnl > 0 ? "wt-pos" : (p.pnl < 0 ? "wt-neg" : "");
+    const levTxt = p.leverage ? p.leverage + "×" + (p.leverageType==="cross"?" C":p.leverageType==="isolated"?" I":"") : "—";
+    const levColor = leverageColor(p.leverage);
+    const mark = getMarkPrice(p.coin);
+    const distPct = (p.liqPx && mark) ? Math.abs(mark - p.liqPx) / mark * 100 : null;
+    const liqColor = p.liqPx ? liqRiskColor(distPct) : "#4C625D";
+    const staleCls = p.stale ? " wt-stale" : "";
+    const staleTitle = p.stale ? ' title="Conexión lenta: mostrando el último dato conocido de esta wallet"' : "";
+    return `<tr class="${staleCls}"${staleTitle}>
+      <td>${p.name.replace(/</g,"&lt;")}${p.stale ? ' <span class="wt-stale-dot">●</span>' : ""}</td>
+      <td class="wt-mono">${p.coin}</td>
+      <td><span class="side-badge ${p.side}">${p.side==="long"?"LONG":"SHORT"}</span><span class="wt-lev" style="background:${levColor}22;color:${levColor}">${levTxt}</span></td>
+      <td class="wt-mono">${fmtPrice(p.entryPx)}</td>
+      <td class="wt-mono">${fmtUsd(p.notional)}</td>
+      <td class="wt-mono ${pnlClass}">${p.pnl>0?"+":""}${fmtUsd(p.pnl)}</td>
+      <td class="wt-mono">${p.accountBalance != null ? fmtUsd(p.accountBalance) : "—"}</td>
+      <td class="wt-mono"><span class="liq-risk" style="background:${liqColor}22;color:${liqColor}">${p.liqPx ? fmtPrice(p.liqPx) : "—"}</span></td>
+    </tr>`;
+  }).join("");
+}
+
+/* ---- detalle de wallet ---- */
+let wmCurrentAddress = null;
+function renderWalletModalSummary(w){
+  const bal = w.accountBalance != null ? fmtUsd(w.accountBalance) : "—";
+  const pnl = w.totalPnl;
+  const pnlCls = pnl > 0 ? "wt-pos" : (pnl < 0 ? "wt-neg" : "");
+  const pnlTxt = pnl != null ? (pnl>0?"+":"") + fmtUsd(pnl) : "—";
+  el("wmSummary").innerHTML = `
+    <div class="wm-stat"><span class="lbl">Balance</span><span class="val">${bal}</span></div>
+    <div class="wm-stat"><span class="lbl">PnL no realizado</span><span class="val ${pnlCls}">${pnlTxt}</span></div>
+  `;
+}
+function renderWalletModalPositions(address){
+  const positions = state.walletPositions.filter(p => p.address === address);
+  const box = el("wmPositions");
+  if(!positions.length){
+    box.innerHTML = '<div class="wallets-empty-hint">Sin posiciones abiertas.</div>';
+    return;
+  }
+  box.innerHTML = positions.map(p=>{
+    const pnlCls = p.pnl > 0 ? "wt-pos" : (p.pnl < 0 ? "wt-neg" : "");
+    const levColor = leverageColor(p.leverage);
+    return `<div class="wm-pos-row">
+      <span class="side-badge ${p.side}">${p.side==="long"?"LONG":"SHORT"}</span>
+      <span class="wt-mono">${p.coin}</span>
+      <span class="wt-mono">${fmtPrice(p.entryPx)}</span>
+      <span class="wt-mono">${fmtUsd(p.notional)}</span>
+      <span class="wt-mono ${pnlCls}">${p.pnl>0?"+":""}${fmtUsd(p.pnl)}</span>
+      <span class="wt-mono" style="color:${levColor}">${p.leverage ? p.leverage+"×" : "—"}</span>
+    </div>`;
+  }).join("");
+}
+function openWalletDetail(address){
+  const w = state.wallets.find(w => w.address === address);
+  if(!w) return;
+  wmCurrentAddress = address;
+  el("wmTitle").textContent = walletLabel(w);
+  el("wmAddr").textContent = w.address;
+  renderWalletModalSummary(w);
+  renderWalletModalPositions(address);
+  el("walletModalBackdrop").style.display = "flex";
+}
+function closeWalletDetail(){
+  el("walletModalBackdrop").style.display = "none";
+  wmCurrentAddress = null;
+}
+el("wmCloseBtn").addEventListener("click", closeWalletDetail);
+el("walletModalBackdrop").addEventListener("click", (e)=>{
+  if(e.target.id === "walletModalBackdrop") closeWalletDetail();
+});
+
+/* ---- sub-páginas ---- */
+function switchWalletSubpage(name){
+  el("wsubManageBtn").classList.toggle("active", name === "manage");
+  el("wsubPositionsBtn").classList.toggle("active", name === "positions");
+  el("wsubLiquidatedBtn").classList.toggle("active", name === "liquidated");
+  el("wsubPageManage").style.display = name === "manage" ? "flex" : "none";
+  el("wsubPagePositions").style.display = name === "positions" ? "flex" : "none";
+  el("wsubPageLiquidated").style.display = name === "liquidated" ? "flex" : "none";
+  if(name === "liquidated") renderWalletLiqHistory();
+}
+el("wsubManageBtn").addEventListener("click", ()=> switchWalletSubpage("manage"));
+el("wsubPositionsBtn").addEventListener("click", ()=> switchWalletSubpage("positions"));
+el("wsubLiquidatedBtn").addEventListener("click", ()=> switchWalletSubpage("liquidated"));
+
+function renderWalletLiqHistory(){
+  const box = el("walletsLiqHistoryList");
+  const events = state.walletLiqEvents.slice().sort((a,b)=> b.time - a.time);
+  if(!events.length){
+    box.innerHTML = '<div class="wallets-empty-hint">Ninguna wallet monitoreada ha sido liquidada todavía.</div>';
+    return;
+  }
+  box.innerHTML = events.map(ev=>{
+    const d = new Date(ev.time * 1000);
+    const dateTxt = d.toLocaleDateString(undefined,{day:"2-digit",month:"short",year:"numeric"});
+    const timeTxt = d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"});
+    const levTxt = ev.leverage ? ev.leverage+"×" : "";
+    const marginTxt = ev.leverageType === "cross" ? "Cruzada" : (ev.leverageType === "isolated" ? "Aislada" : "—");
+    const notionalTxt = ev.notional != null ? fmtUsd(ev.notional) : "—";
+    const pctTxt = ev.pctOfAccount != null ? ev.pctOfAccount.toFixed(1)+"% de la cuenta" : null;
+    return `<div class="wlh-row">
+      <span class="wlh-icon">☠</span>
+      <div class="wlh-body">
+        <div class="wlh-title">${(ev.name||"").replace(/</g,"&lt;")} · ${ev.coin} ${ev.side==="long"?"LONG":"SHORT"} ${levTxt}</div>
+        <div class="wlh-sub">Liquidado: ${notionalTxt}${pctTxt ? " · "+pctTxt : ""} · ${marginTxt} · Precio: ${fmtPrice(ev.price)}</div>
+      </div>
+      <div class="wlh-time">${dateTxt}<br>${timeTxt}</div>
+    </div>`;
+  }).join("");
+}
+el("walletsLiqClearBtn").addEventListener("click", ()=>{
+  if(!state.walletLiqEvents.length) return;
+  if(confirm("¿Eliminar todo el historial de wallets liquidadas? Esta acción no se puede deshacer.")){
+    state.walletLiqEvents = [];
+    saveCachedWalletLiqEvents();
+    renderWalletLiqHistory();
+    if(chartPanelOpen) updateChartMarkers();
+  }
+});
+
+/* ---- formulario de añadir wallet / filtro de posiciones ---- */
+// Si el usuario pega una wallet junto con un nombre/apodo (por ejemplo copiado de un
+// leaderboard: "D7Top1 0x1633...4798" o "0x1633...4798 - D7Top1"), lo detectamos y
+// autocompletamos el campo de nombre — sigue siendo opcional, se puede editar o borrar.
+function parseWalletPaste(text){
+  const match = (text||"").match(/0x[0-9a-fA-F]{40}/);
+  if(!match) return null;
+  const address = match[0];
+  let rest = text.replace(address, "");
+  rest = rest.replace(/^[\s\-–—:|()·•,"']+|[\s\-–—:|()·•,"']+$/g, "").trim();
+  rest = rest.replace(/\s{2,}/g, " ");
+  return { address, name: rest || null };
+}
+el("walletAddrInput").addEventListener("paste", (e)=>{
+  const text = (e.clipboardData || window.clipboardData).getData("text");
+  const parsed = parseWalletPaste(text);
+  if(parsed && parsed.name){
+    e.preventDefault();
+    el("walletAddrInput").value = parsed.address;
+    const nameInput = el("walletNameInput");
+    if(!nameInput.value.trim()){
+      nameInput.value = parsed.name;
+      setWalletAddStatus(`Nombre detectado en lo pegado: "${parsed.name}" — puedes cambiarlo o dejarlo vacío.`, "ok");
+    }
+  }
+  // si no venía nombre junto a la dirección, se deja el pegado normal (solo la dirección)
+});
+el("walletAddBtn").addEventListener("click", ()=>{
+  const addrInput = el("walletAddrInput");
+  const nameInput = el("walletNameInput");
+  if(addWalletEntry(addrInput.value, nameInput.value)){
+    addrInput.value = "";
+    nameInput.value = "";
+  }
+});
+el("walletAddrInput").addEventListener("keydown", (e)=>{ if(e.key === "Enter") el("walletAddBtn").click(); });
+el("walletNameInput").addEventListener("keydown", (e)=>{ if(e.key === "Enter") el("walletAddBtn").click(); });
+el("walletAssetFilter").addEventListener("change", (e)=>{
+  state.walletAssetFilter = e.target.value;
+  renderWalletsTable();
+});
+el("walletRefreshBtn").addEventListener("click", ()=> refreshAllWallets());
+el("refreshAllBtn").addEventListener("click", ()=> refreshAllWallets());
+
+const autoToggleEl = el("autoToggle");
+autoToggleEl.classList.toggle("on", state.autoRefresh);
+autoToggleEl.addEventListener("click", ()=>{
+  state.autoRefresh = !state.autoRefresh;
+  autoToggleEl.classList.toggle("on", state.autoRefresh);
+  saveSettings();
+  if(state.autoRefresh) startWalletLoop(); else stopWalletLoop();
+});
+
+let walletPollTimer = null;
+function startWalletLoop(){
+  clearInterval(walletPollTimer);
+  refreshAllWallets();
+  walletPollTimer = setInterval(refreshAllWallets, WALLET_POLL_MS);
+}
+function stopWalletLoop(){
+  clearInterval(walletPollTimer);
+  walletPollTimer = null;
+}
+
+renderWalletsChips();
+renderWalletsTable();
+populateWalletAssetFilter();
+renderWalletLiqHistory();
+setTopbarStatus();
+
+/* ============================= PANEL DE GRÁFICO (bajo demanda) ============================= */
+const miniChart = LightweightCharts.createChart(el("miniChart"), {
+  layout:{ background:{color:"transparent"}, textColor:"#8aa39c", fontFamily:"Inter, sans-serif", fontSize:11 },
+  grid:{ vertLines:{color:"rgba(151,252,228,0.045)"}, horzLines:{color:"rgba(151,252,228,0.045)"} },
+  rightPriceScale:{ borderColor:"rgba(151,252,228,0.12)", scaleMargins:{top:0.08, bottom:0.26} },
+  timeScale:{ borderColor:"rgba(151,252,228,0.12)", timeVisible:true, secondsVisible:false, rightOffset:6, barSpacing:7 },
+  crosshair:{ mode:0 },
+  handleScroll:true, handleScale:true
+});
+const miniCandleSeries = miniChart.addCandlestickSeries({
+  upColor:"#5FE3B8", downColor:"#FF6B6B", wickUpColor:"#5FE3B8", wickDownColor:"#FF6B6B",
+  borderVisible:false, priceFormat:{ type:"custom", formatter: fmtPrice, minMove: 0.00000001 }
+});
+const miniVolumeSeries = miniChart.addHistogramSeries({
+  priceScaleId:"vol", priceFormat:{type:"volume"}, color:"#3a5750"
+});
+miniChart.priceScale("vol").applyOptions({ scaleMargins:{ top:0.82, bottom:0 } });
+
+const chartLiqCanvas = el("chartLiqCanvas");
+const chartLiqCtx = chartLiqCanvas.getContext("2d");
+function resizeChartLiqCanvas(){
+  const rect = el("chartBodyWrap").getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  chartLiqCanvas.width = Math.max(1, Math.round(rect.width*dpr));
+  chartLiqCanvas.height = Math.max(1, Math.round(rect.height*dpr));
+  chartLiqCanvas.style.width = rect.width+"px";
+  chartLiqCanvas.style.height = rect.height+"px";
+  chartLiqCtx.setTransform(dpr,0,0,dpr,0,0);
+}
+function roundRectPath(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+function renderChartLiqOverlay(){
+  const rect = el("chartBodyWrap").getBoundingClientRect();
+  chartLiqCtx.clearRect(0, 0, rect.width, rect.height);
+  if(!state.chartCoin) return;
+  const relevant = state.walletPositions.filter(p => p.coin === state.chartCoin && p.liqPx);
+
+  // ---- Doble referencia: bandas sombreadas en la ubicación REAL del precio ----
+  // No usan el ajuste anti-solape de las etiquetas de abajo, así siempre muestran
+  // dónde está el nivel de liquidación de verdad, aunque su etiqueta se haya movido
+  // para no chocar con otras. Las ya liquidadas quedan tenues como registro histórico.
+  const bandHalfH = 4;
+  chartLiqCtx.save();
+  state.walletLiqEvents.filter(ev => ev.coin === state.chartCoin).forEach(ev=>{
+    const y = miniCandleSeries.priceToCoordinate(ev.price);
+    if(y == null || y < -bandHalfH || y > rect.height + bandHalfH) return;
+    chartLiqCtx.fillStyle = leverageColor(ev.leverage) + "16"; // tenue: ya liquidada
+    chartLiqCtx.fillRect(0, y - bandHalfH, rect.width, bandHalfH*2);
+  });
+  relevant.forEach(p=>{
+    const y = miniCandleSeries.priceToCoordinate(p.liqPx);
+    if(y == null || y < -bandHalfH || y > rect.height + bandHalfH) return;
+    chartLiqCtx.fillStyle = leverageColor(p.leverage) + "40"; // fuerte: posición abierta hoy
+    chartLiqCtx.fillRect(0, y - bandHalfH, rect.width, bandHalfH*2);
+  });
+  chartLiqCtx.restore();
+
+  if(!relevant.length) return;
+  const items = relevant.map(p=>{
+    const y = miniCandleSeries.priceToCoordinate(p.liqPx);
+    return (y == null || y < 0 || y > rect.height) ? null : { p, y, color: leverageColor(p.leverage) };
+  }).filter(Boolean).sort((a,b)=> a.y - b.y);
+  if(!items.length) return;
+  const minGap = 15;
+  for(let i=1;i<items.length;i++){
+    if(items[i].y - items[i-1].y < minGap) items[i].y = items[i-1].y + minGap;
+  }
+  chartLiqCtx.save();
+  items.forEach(item=>{
+    const { p, y, color } = item;
+    chartLiqCtx.beginPath();
+    chartLiqCtx.setLineDash([3,4]);
+    chartLiqCtx.strokeStyle = color + "99";
+    chartLiqCtx.lineWidth = 1;
+    chartLiqCtx.moveTo(0, y);
+    chartLiqCtx.lineTo(rect.width, y);
+    chartLiqCtx.stroke();
+    chartLiqCtx.setLineDash([]);
+
+    const label = (p.leverage ? p.leverage+"× " : "") + p.name + " · " + fmtPrice(p.liqPx);
+    chartLiqCtx.font = "600 10px 'JetBrains Mono', monospace";
+    const textW = chartLiqCtx.measureText(label).width;
+    const padX = 6, boxH = 16;
+    chartLiqCtx.fillStyle = "rgba(9,20,18,0.94)";
+    chartLiqCtx.strokeStyle = color;
+    chartLiqCtx.lineWidth = 1;
+    roundRectPath(chartLiqCtx, 4, y-boxH/2, textW+padX*2, boxH, 4);
+    chartLiqCtx.fill(); chartLiqCtx.stroke();
+    chartLiqCtx.fillStyle = color;
+    chartLiqCtx.textBaseline = "middle";
+    chartLiqCtx.textAlign = "left";
+    chartLiqCtx.fillText(label, 4+padX, y+0.5);
+  });
+  chartLiqCtx.restore();
+}
+miniChart.timeScale().subscribeVisibleLogicalRangeChange(()=> renderChartLiqOverlay());
+
+function updateChartMarkers(){
+  if(!state.chartCoin){ miniCandleSeries.setMarkers([]); return; }
+  const barSec = (INTERVAL_MS[state.chartInterval] || 60000) / 1000;
+  const seen = new Set();
+  const markers = [];
+  state.walletLiqEvents.filter(ev => ev.coin === state.chartCoin).forEach(ev=>{
+    const t = Math.floor(ev.time / barSec) * barSec;
+    const key = t + "|" + (ev.side === "long" ? "b" : "a");
+    if(seen.has(key)) return;
+    seen.add(key);
+    markers.push({
+      time: t,
+      position: ev.side === "long" ? "belowBar" : "aboveBar",
+      color: leverageColor(ev.leverage),
+      shape: "circle",
+      size: 0.55,
+      text: ""
+    });
+  });
+  markers.sort((a,b)=> a.time - b.time);
+  miniCandleSeries.setMarkers(markers);
+}
+
+new ResizeObserver(()=>{
+  const wrap = el("chartBodyWrap");
+  miniChart.resize(wrap.clientWidth, wrap.clientHeight);
+  resizeChartLiqCanvas();
+  renderChartLiqOverlay();
+}).observe(el("chartBodyWrap"));
+
+/* ---- selector de activo / temporalidad ---- */
+function populateChartAssetOptions(){
+  const sel = el("chartAssetSelect");
+  const coins = Array.from(new Set(state.walletPositions.map(p=>p.coin))).sort();
+  const prev = sel.value || state.chartCoin;
+  sel.innerHTML = coins.length
+    ? coins.map(c => `<option value="${c}">${c}</option>`).join("")
+    : '<option value="">Sin activos</option>';
+  if(coins.length){
+    const keep = coins.includes(prev) ? prev : coins[0];
+    sel.value = keep;
+    if(state.chartCoin !== keep){
+      state.chartCoin = keep;
+      if(chartPanelOpen) loadChartData();
+    }
+  } else if(state.chartCoin !== null){
+    state.chartCoin = null;
+  }
+  el("chartEmpty").style.display = coins.length ? "none" : "flex";
+}
+el("chartAssetSelect").addEventListener("change", (e)=>{
+  state.chartCoin = e.target.value || null;
+  saveSettings();
+  if(state.chartCoin) loadChartData();
+});
+
+const tfRow = el("chartTfRow");
+tfRow.innerHTML = TIMEFRAMES.map(tf =>
+  `<button type="button" class="cm-tf-btn${tf.value===state.chartInterval?" active":""}" data-tf="${tf.value}">${tf.label}</button>`
+).join("");
+tfRow.querySelectorAll(".cm-tf-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    state.chartInterval = btn.getAttribute("data-tf");
+    tfRow.querySelectorAll(".cm-tf-btn").forEach(b=> b.classList.toggle("active", b===btn));
+    saveSettings();
+    if(state.chartCoin) loadChartData();
+  });
+});
+
+async function loadChartData(){
+  if(!state.chartCoin) return;
+  el("chartLoading").classList.add("show");
+  el("cmTitle").textContent = "Gráfico · " + state.chartCoin;
+  try{
+    const candles = await fetchCandles(state.chartCoin, state.chartInterval, CHART_CANDLE_COUNT, 20000);
+    miniCandleSeries.setData(candles.map(c=>({time:c.time, open:c.open, high:c.high, low:c.low, close:c.close})));
+    miniVolumeSeries.setData(candles.map(c=>({time:c.time, value:c.volume, color: c.close>=c.open ? "rgba(95,227,184,0.5)" : "rgba(255,107,107,0.5)"})));
+    miniChart.timeScale().fitContent();
+    renderChartLiqOverlay();
+    updateChartMarkers();
+    el("chartNote").textContent = "Actualizado " + new Date().toLocaleTimeString() + " · se refresca cada pocos minutos (no en vivo).";
+  } catch(err){
+    console.warn("chart load failed", err);
+    el("chartNote").textContent = "No se pudo cargar el gráfico (conexión). Toca ⟳ para reintentar.";
+  } finally {
+    el("chartLoading").classList.remove("show");
+  }
+}
+el("chartRefreshBtn").addEventListener("click", ()=>{ if(state.chartCoin) loadChartData(); });
+
+/* ---- abrir / cerrar panel ---- */
+let chartPanelOpen = false;
+let chartAutoTimer = null;
+function openChartPanel(){
+  populateChartAssetOptions();
+  el("chartModalBackdrop").style.display = "flex";
+  chartPanelOpen = true;
+  requestAnimationFrame(()=>{
+    const wrap = el("chartBodyWrap");
+    miniChart.resize(wrap.clientWidth, wrap.clientHeight);
+    resizeChartLiqCanvas();
+    if(state.chartCoin) loadChartData();
+  });
+  clearInterval(chartAutoTimer);
+  chartAutoTimer = setInterval(()=>{ if(state.chartCoin) loadChartData(); }, CHART_AUTO_REFRESH_MS);
+}
+function closeChartPanel(){
+  el("chartModalBackdrop").style.display = "none";
+  chartPanelOpen = false;
+  clearInterval(chartAutoTimer);
+}
+el("openChartBtn").addEventListener("click", openChartPanel);
+el("cmCloseBtn").addEventListener("click", closeChartPanel);
+el("chartModalBackdrop").addEventListener("click", (e)=>{
+  if(e.target.id === "chartModalBackdrop") closeChartPanel();
+});
+
+/* ============================= COMPARTIR IMAGEN ============================= */
+// html2canvas se carga bajo demanda (recién cuando el usuario toca "Compartir"),
+// probando más de un CDN por si alguno está bloqueado por la red/VPN del usuario.
+let html2canvasLoadPromise = null;
+function loadScriptOnce(src){
+  return new Promise((resolve, reject)=>{
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("no se pudo cargar " + src));
+    document.head.appendChild(s);
+  });
+}
+async function ensureHtml2Canvas(){
+  if(window.html2canvas) return;
+  if(html2canvasLoadPromise) return html2canvasLoadPromise;
+  const sources = [
+    "https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
+    "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"
+  ];
+  html2canvasLoadPromise = (async ()=>{
+    for(const src of sources){
+      try{
+        await loadScriptOnce(src);
+        if(window.html2canvas) return;
+      } catch(e){ /* probamos la siguiente fuente */ }
+    }
+    html2canvasLoadPromise = null; // permite reintentar en el próximo toque
+    throw new Error("No se pudo cargar el motor de imágenes desde ningún servidor.");
+  })();
+  return html2canvasLoadPromise;
+}
+
+// Convierte un elemento del DOM en una imagen PNG y la comparte (Web Share API con
+// archivos) o, si el navegador no lo soporta, la descarga directamente.
+async function captureAndShare(targetEl, filename, title){
+  try{
+    await ensureHtml2Canvas();
+  } catch(e){
+    alert("No se pudo cargar el motor de imágenes. Revisa tu conexión a internet e intenta de nuevo.");
+    return;
+  }
+  try{
+    const canvas = await html2canvas(targetEl, {
+      backgroundColor: "#07100f",
+      scale: Math.min(2, window.devicePixelRatio || 1),
+      useCORS: true,
+      logging: false
+    });
+    canvas.toBlob(async (blob)=>{
+      if(!blob) return;
+      const file = new File([blob], filename, { type: "image/png" });
+      if(navigator.canShare && navigator.canShare({ files:[file] })){
+        try{
+          await navigator.share({ files:[file], title: title || "WhaleWatch" });
+          return;
+        } catch(err){
+          if(err && err.name === "AbortError") return; // el usuario canceló el share
+          // si el share falla por otra razón, seguimos abajo con la descarga
+        }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(()=> URL.revokeObjectURL(url), 4000);
+    }, "image/png");
+  } catch(err){
+    console.warn("captura de imagen falló", err);
+    alert("No se pudo generar la imagen. Intenta de nuevo.");
+  }
+}
+
+// Posiciones: arma una tarjeta "reporte" fuera de pantalla (clonando la tabla ya
+// filtrada) para compartir una imagen limpia, sin los botones ni el menú.
+function buildPositionsExportNode(){
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "width:840px;background:#07100f;color:#DCEAE6;font-family:Inter,sans-serif;padding:26px;";
+  const filterTxt = state.walletAssetFilter ? ("Activo: " + state.walletAssetFilter) : "Todos los activos";
+  const head = document.createElement("div");
+  head.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:4px;";
+  head.innerHTML = `
+    <span style="width:10px;height:10px;border-radius:50%;background:#5FE3B8;box-shadow:0 0 8px #5FE3B8;"></span>
+    <span style="font-weight:800;font-size:17px;color:#97FCE4;letter-spacing:.3px;">WHALEWATCH</span>
+  `;
+  const sub = document.createElement("div");
+  sub.style.cssText = "font-size:11.5px;color:#7C958E;margin:4px 0 16px;font-family:'JetBrains Mono',monospace;";
+  sub.textContent = filterTxt + " · " + new Date().toLocaleString();
+  const tableWrapDiv = document.createElement("div");
+  tableWrapDiv.style.cssText = "border:1px solid rgba(151,252,228,0.15);border-radius:12px;overflow:hidden;";
+  const tableClone = el("walletsTableBody").closest("table").cloneNode(true);
+  tableClone.style.width = "100%";
+  tableWrapDiv.appendChild(tableClone);
+  wrap.appendChild(head);
+  wrap.appendChild(sub);
+  wrap.appendChild(tableWrapDiv);
+  return wrap;
+}
+async function sharePositionsImage(){
+  const node = buildPositionsExportNode();
+  node.style.position = "fixed";
+  node.style.left = "-9999px";
+  node.style.top = "0";
+  document.body.appendChild(node);
+  try{
+    await captureAndShare(node, "whalewatch-posiciones.png", "Posiciones — WhaleWatch");
+  } finally {
+    document.body.removeChild(node);
+  }
+}
+el("sharePositionsBtn").addEventListener("click", sharePositionsImage);
+
+// Gráfico: se captura el panel visible tal cual (título, controles, velas,
+// liquidaciones y leyenda), porque el canvas de las velas no se puede clonar.
+async function shareChartImage(){
+  if(!state.chartCoin){ alert("Selecciona un activo con posiciones abiertas primero."); return; }
+  await captureAndShare(el("chartModal"), "whalewatch-grafico-"+state.chartCoin+".png", "Gráfico "+state.chartCoin+" — WhaleWatch");
+}
+el("shareChartBtn").addEventListener("click", shareChartImage);
+
+/* ============================= INIT ============================= */
+if(state.autoRefresh) startWalletLoop(); else refreshAllWallets();
+
+})();
+</script>
+<script>
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js').catch((err) => {
+        console.warn('No se pudo registrar el service worker', err);
+      });
+    });
+  }
+</script>
+</body>
+</html>
