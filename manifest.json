@@ -1,0 +1,70 @@
+{
+  "id": "./",
+  "name": "WhaleWatch — Monitor de Wallets Hyperliquid",
+  "short_name": "WhaleWatch",
+  "description": "Monitorea wallets de Hyperliquid: posiciones abiertas, balance, PnL, riesgo de liquidación y un gráfico bajo demanda de los activos con posiciones abiertas.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "any",
+  "background_color": "#07100f",
+  "theme_color": "#07100f",
+  "lang": "es",
+  "dir": "ltr",
+  "categories": [
+    "finance",
+    "business",
+    "utilities"
+  ],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Posiciones",
+      "short_name": "Posiciones",
+      "url": "./index.html?tab=positions"
+    },
+    {
+      "name": "Alertas",
+      "short_name": "Alertas",
+      "url": "./index.html?tab=alerts"
+    },
+    {
+      "name": "Liquidadas",
+      "short_name": "Liquidadas",
+      "url": "./index.html?tab=liquidated"
+    }
+  ],
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  }
+}
