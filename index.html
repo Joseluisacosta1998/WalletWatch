@@ -1,0 +1,3332 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>WhaleWatch — Monitor de Wallets Hyperliquid y Lighter</title>
+<meta name="description" content="Monitorea wallets de Hyperliquid y Lighter: posiciones abiertas, balance, PnL, riesgo de liquidación y un gráfico bajo demanda de los activos que tienen posiciones abiertas.">
+
+<!-- PWA -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#07100f">
+<meta name="background-color" content="#07100f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="WhaleWatch">
+<link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root{
+    --bg:#07100f;
+    --bg-panel:#0c1917;
+    --bg-panel-2:#0f1d1b;
+    --border:rgba(151,252,228,0.09);
+    --border-strong:rgba(151,252,228,0.18);
+    --mint:#5FE3B8;
+    --mint-bright:#97FCE4;
+    --mint-dim:rgba(95,227,184,0.35);
+    --red:#FF6B6B;
+    --red-dim:rgba(255,107,107,0.35);
+    --gold:#F5D76E;
+    --text:#DCEAE6;
+    --text-dim:#7C958E;
+    --text-faint:#4C625D;
+    --mono:'JetBrains Mono', monospace;
+    --sans:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;padding:0;height:100%;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    overflow:hidden;
+  }
+  #app{
+    display:flex;
+    flex-direction:column;
+    height:100vh;
+    height:100dvh;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+
+  /* ---------- TOP BAR ---------- */
+  .topbar{
+    display:flex;align-items:center;gap:14px;padding:12px 16px;
+    background:linear-gradient(180deg, var(--bg-panel-2), var(--bg-panel));
+    border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;
+  }
+  .brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:16px;letter-spacing:.2px;color:var(--mint-bright);}
+  .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--mint);box-shadow:0 0 8px var(--mint);}
+  .brand .dot.live{animation:pulse 1.6s infinite;}
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 var(--mint-dim);}
+    70%{box-shadow:0 0 0 7px rgba(95,227,184,0);}
+    100%{box-shadow:0 0 0 0 rgba(95,227,184,0);}
+  }
+  .brand small{display:block;font-size:10px;font-weight:600;color:var(--text-faint);letter-spacing:.03em;margin-top:1px;}
+  .topbar-status{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);flex:1;min-width:120px;}
+  .topbar-right{display:flex;align-items:center;gap:10px;}
+  .icon-btn{
+    display:flex;align-items:center;gap:6px;background:var(--bg-panel);border:1px solid var(--border);
+    color:var(--text-dim);padding:8px 12px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;
+    font-family:var(--sans);
+  }
+  .icon-btn:active{border-color:var(--border-strong);color:var(--mint-bright);background:var(--bg-panel-2);}
+  .toggle{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--text-dim);cursor:pointer;user-select:none;}
+  .toggle .switch{width:30px;height:16px;border-radius:9px;background:#1c2c29;position:relative;transition:.2s;border:1px solid var(--border);flex-shrink:0;}
+  .toggle .switch::after{content:'';position:absolute;top:1px;left:1px;width:12px;height:12px;border-radius:50%;background:var(--text-faint);transition:.2s;}
+  .toggle.on .switch{background:rgba(95,227,184,0.18);border-color:var(--mint-dim);}
+  .toggle.on .switch::after{transform:translateX(14px);background:var(--mint);}
+  @media (max-width:640px){ .toggle-label{display:none;} }
+
+  /* ---------- SUB-TABS ---------- */
+  .wsub-tabs{display:flex;gap:6px;padding:12px 16px 0;flex-shrink:0;overflow-x:auto;}
+  .wsub-tab{white-space:nowrap;}
+  .wsub-tab{
+    background:var(--bg-panel);border:1px solid var(--border);border-bottom:none;color:var(--text-dim);
+    font-size:12.5px;font-weight:700;padding:9px 16px;border-radius:9px 9px 0 0;cursor:pointer;font-family:var(--sans);
+  }
+  .wsub-tab.active{background:var(--bg-panel-2);color:var(--mint);border-color:var(--border-strong);}
+  .wsub-page{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-height:0;background:var(--bg-panel-2);}
+
+  /* ---------- ESCANEO / IMPORTACIÓN (v9.6) ---------- */
+  .scan-toggle{margin:8px 0 0;}
+  .scan-toggle button{background:var(--bg-panel-2);border:1px solid var(--border-strong);color:var(--mint);border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;}
+  .scan-panel{display:none;margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--bg-panel);flex-direction:column;gap:8px;}
+  .scan-panel.open{display:flex;}
+  .scan-panel textarea{width:100%;min-height:84px;resize:vertical;background:var(--bg-panel-2);border:1px solid var(--border-strong);color:var(--text);border-radius:8px;padding:9px 10px;font-size:12px;font-family:var(--mono);outline:none;box-sizing:border-box;}
+  .scan-panel textarea:focus{border-color:var(--mint-dim);}
+  .scan-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .scan-row button,.scan-row select{background:var(--bg-panel-2);border:1px solid var(--border-strong);color:var(--text);border-radius:8px;padding:8px 10px;font-size:12px;cursor:pointer;}
+  .scan-row button.primary{background:var(--mint);color:#04211a;border-color:var(--mint);font-weight:800;}
+  .scan-row label{font-size:11.5px;color:var(--text-faint);display:flex;gap:6px;align-items:center;}
+  .scan-hint{font-size:11px;color:var(--text-faint);line-height:1.4;}
+  .scan-results{display:flex;flex-direction:column;gap:3px;font-family:var(--mono);font-size:11px;}
+  .scan-results .ok{color:var(--mint);} .scan-results .dup{color:#e8c46a;} .scan-results .skip{color:var(--text-faint);}
+  .wc-scan{font-size:9px;border:1px solid var(--border-strong);color:#e8c46a;border-radius:5px;padding:0 5px;white-space:nowrap;}
+  /* ---------- ICONOS DE ACTIVOS + BUSCADOR (v9.15) ---------- */
+  .coin-ic{position:relative;display:inline-flex;align-items:center;justify-content:center;width:var(--s,18px);height:var(--s,18px);border-radius:50%;background:var(--bg-panel-2);border:1px solid var(--border);overflow:hidden;flex-shrink:0;vertical-align:middle;margin-right:6px;}
+  .coin-ic .coin-fb{font-size:calc(var(--s,18px)*.55);font-weight:800;color:var(--mint);line-height:1;}
+  .coin-ic img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:var(--bg-panel-2);}
+  .asset-picker-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;background:var(--bg-panel-2);border:1px solid var(--border-strong);color:var(--text);border-radius:8px;padding:9px 12px;font-size:13px;font-family:var(--sans);cursor:pointer;text-align:left;}
+  .asset-picker-btn .apb-label{display:flex;align-items:center;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+  .asset-picker-btn .apb-caret{color:var(--text-faint);font-size:11px;flex-shrink:0;}
+  .ap-backdrop{position:fixed;inset:0;background:rgba(3,10,9,.78);z-index:9999;display:none;align-items:flex-end;justify-content:center;}
+  .ap-sheet{width:100%;max-width:560px;max-height:82%;display:flex;flex-direction:column;background:var(--bg-panel);border:1px solid var(--border-strong);border-radius:16px 16px 0 0;overflow:hidden;}
+  .ap-head{display:flex;gap:8px;padding:12px;border-bottom:1px solid var(--border);}
+  .ap-head input{flex:1;min-width:0;background:var(--bg-panel-2);border:1px solid var(--border-strong);color:var(--text);border-radius:8px;padding:10px 12px;font-size:14px;outline:none;}
+  .ap-head input:focus{border-color:var(--mint-dim);}
+  .ap-head button{background:var(--bg-panel-2);border:1px solid var(--border-strong);color:var(--text);border-radius:8px;padding:0 12px;font-size:15px;cursor:pointer;}
+  .ap-list{overflow-y:auto;overscroll-behavior:contain;}
+  .ap-item{display:flex;align-items:center;padding:11px 14px;border-bottom:1px solid var(--border);font-size:14px;color:var(--text);cursor:pointer;}
+  .ap-item:active,.ap-item.sel{background:var(--bg-panel-2);}
+  .ap-item.sel{color:var(--mint);font-weight:700;}
+  .ap-empty{padding:18px;text-align:center;color:var(--text-faint);font-size:13px;}
+  /* ---------- FAVORITOS (v9.15d) ---------- */
+  #wsubPageFav > *{flex-shrink:0;}
+  .ap-star,.chip-star,.wc-star{cursor:pointer;color:var(--text-faint);font-size:16px;padding:2px 6px;}
+  .ap-star.on,.chip-star.on,.wc-star.on{color:#F5D76E;}
+  .ap-name{flex:1;min-width:0;}
+  .ap-sec{padding:6px 14px;font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#F5D76E;background:var(--bg-panel-2);}
+  .chip-star{padding:0 4px 0 0;font-size:13px;}
+  .fav-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  .fav-box{background:var(--bg-panel);border:1px solid var(--border);border-radius:12px;padding:12px;}
+  .fav-box .fb-h{font-weight:800;font-size:13.5px;margin-bottom:8px;}
+  .fav-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;}
+  .fav-row input,.fav-row select{flex:1 1 140px;min-width:0;background:var(--bg-panel-2);border:1px solid var(--border-strong);color:var(--text);border-radius:8px;padding:9px 10px;font-size:13px;outline:none;}
+  .fav-row button{background:var(--mint);color:#04211a;border:0;border-radius:8px;padding:9px 12px;font-size:12.5px;font-weight:800;cursor:pointer;}
+  .fav-box summary{cursor:pointer;font-size:12.5px;font-weight:700;color:var(--mint);padding:4px 0;}
+  .fav-pick{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--border);font-size:12px;}
+  .fav-pick .fp-main{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;}
+  .fav-pick b{font-family:var(--mono);font-size:11.5px;}
+  .fav-pick button{background:var(--bg-panel-2);border:1px solid var(--border-strong);color:#F5D76E;border-radius:7px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer;}
+  .fx-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border);font-size:12px;}
+  .fx-row .fx-bar{flex:1;height:8px;border-radius:4px;background:rgba(255,107,107,.55);overflow:hidden;}
+  .fx-row .fx-bar i{display:block;height:100%;background:#5FE3B8;}
+  .fx-row .fx-amt{font-family:var(--mono);font-size:11px;text-align:right;min-width:92px;}
+  .fav-card{background:var(--bg-panel);border:1px solid var(--border);border-left:4px solid var(--border-strong);border-radius:12px;padding:10px 12px;margin-bottom:8px;cursor:pointer;}
+  .fav-card.rr{border-left-color:#FF6B6B;} .fav-card.ro{border-left-color:#FF9F45;} .fav-card.rg{border-left-color:#5FE3B8;}
+  .fav-card .fc-top{display:flex;align-items:center;gap:8px;}
+  .fav-card .fc-name{font-weight:800;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .fav-card .fc-bal{margin-left:auto;font-family:var(--mono);font-weight:800;white-space:nowrap;}
+  .fav-card .fc-bias{margin-top:8px;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-faint);}
+  .fav-card .fc-bias .fx-bar{flex:1;height:7px;border-radius:4px;background:rgba(255,107,107,.55);overflow:hidden;}
+  .fav-card .fc-bias .fx-bar i{display:block;height:100%;background:#5FE3B8;}
+  .fav-card .fc-row{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:11.5px;color:var(--text-faint);}
+  .fav-card .fc-row b{color:var(--text);font-family:var(--mono);}
+  .fav-card .fc-pos{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+  .fav-card .fc-chip{display:inline-flex;align-items:center;gap:4px;background:var(--bg-panel-2);border:1px solid var(--border);border-radius:7px;padding:3px 7px;font-size:11px;font-family:var(--mono);}
+  .fav-card .fc-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+  .fav-card .fc-badge{border-radius:6px;padding:2px 7px;font-size:10.5px;font-weight:800;background:var(--bg-panel-2);border:1px solid var(--border-strong);}
+  .fav-card .fc-note{margin-top:7px;font-size:11.5px;color:#F5D76E;}
+  .fav-card .fc-acts{display:flex;gap:6px;margin-top:8px;}
+  .fav-card .fc-acts span{background:var(--bg-panel-2);border:1px solid var(--border-strong);border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;color:var(--text-dim);}
+  .fav-feed{display:flex;gap:8px;padding:6px 0;border-top:1px solid var(--border);font-size:11.5px;}
+  .fav-feed small{color:var(--text-faint);}
+  /* ---------- WALLET ADD / LIST ---------- */
+  .wallet-add{display:flex;flex-wrap:wrap;gap:8px;}
+  .wallet-add input{
+    background:var(--bg-panel);border:1px solid var(--border);color:var(--text);
+    border-radius:7px;padding:10px 11px;font-size:12.5px;font-family:var(--mono);outline:none;min-width:0;
+  }
+  .wallet-add input#walletAddrInput{flex:2 1 260px;}
+  .wallet-add input#walletNameInput{flex:1 1 130px;}
+  .wallet-add input:focus{border-color:var(--mint-dim);}
+  .wallet-add button{
+    background:var(--mint);color:#04211a;border:none;border-radius:7px;padding:10px 16px;
+    font-size:12.5px;font-weight:800;cursor:pointer;font-family:var(--sans);white-space:nowrap;
+  }
+  .wallets-add-status{font-size:11px;color:var(--text-faint);font-family:var(--mono);min-height:14px;}
+  .wallets-add-status.err{color:var(--red);}
+  .wallets-add-status.ok{color:var(--mint);}
+  .wallets-empty-hint{font-size:12px;color:var(--text-faint);padding:6px 2px;}
+
+  .wallets-list{display:flex;flex-direction:column;gap:8px;}
+  .cs-price{font-family:var(--mono);font-size:21px;font-weight:800;letter-spacing:.2px;margin:0 4px;transition:color .15s;}
+  .cs-price.up{color:var(--mint);}
+  .cs-price.down{color:var(--red);}
+  .wl-count{font-size:11px;color:var(--text-faint);font-family:var(--mono);}
+  .wl-more{background:var(--bg-panel-2);border:1px solid var(--border-strong);color:var(--mint);border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;}
+  .wallet-add select{flex:0 1 150px;background:var(--bg-panel-2);border:1px solid var(--border-strong);color:var(--text);border-radius:8px;padding:9px 10px;font-size:13px;font-family:var(--sans);outline:none;}
+  .wallet-add select:focus{border-color:var(--mint-dim);}
+  .ex-tag{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.4px;padding:1px 5px;border-radius:5px;margin-left:5px;vertical-align:middle;}
+  .ex-tag.hl{background:rgba(95,227,184,.14);color:var(--mint);}
+  .ex-tag.lt{background:rgba(151,130,255,.18);color:#B6A6FF;}
+  .wallet-chip{
+    display:flex;align-items:center;gap:10px;background:var(--bg-panel);border:1px solid var(--border);
+    border-radius:10px;padding:9px 10px 9px 12px;font-size:11.5px;color:var(--text);cursor:pointer;
+  }
+  .wallet-chip:active{background:var(--bg-panel-2);}
+  .wallet-chip .wc-id{display:flex;align-items:center;gap:7px;flex:1 1 0;min-width:0;overflow:hidden;}
+  .wallet-chip .wc-id .ex-tag{flex-shrink:0;margin-left:0;}
+  .wallet-chip .wc-dot{width:6px;height:6px;border-radius:50%;background:var(--mint);flex-shrink:0;}
+  .wallet-chip .wc-dot.err{background:var(--red);}
+  .wallet-chip .wc-name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto;}
+  .wallet-chip .wc-addr{font-family:var(--mono);color:var(--text-faint);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 100 auto;}
+  .wallet-chip .wc-stats{flex:0 0 auto;display:flex;gap:12px;justify-content:flex-end;}
+  .wallet-chip .wc-stat-item{display:flex;flex-direction:column;align-items:flex-end;line-height:1.3;flex-shrink:0;min-width:62px;}
+  .wallet-chip .wc-stat-item .lbl{font-size:8px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-faint);}
+  .wallet-chip .wc-stat-item .val{font-family:var(--mono);font-size:11px;font-weight:800;color:var(--text);}
+  .wallet-chip .wc-stat-item .val.wt-pos{color:var(--mint);}
+  .wallet-chip .wc-stat-item .val.wt-neg{color:var(--red);}
+  .wallet-chip .wc-actions{display:flex;gap:6px;flex-shrink:0;}
+  .wallet-chip .wc-edit{
+    width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:rgba(151,252,228,0.12);color:var(--mint);cursor:pointer;font-size:10px;flex-shrink:0;
+  }
+  .wallet-chip .wc-x{
+    width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:rgba(255,107,107,0.12);color:var(--red);cursor:pointer;font-size:12px;line-height:1;flex-shrink:0;
+  }
+
+  /* ---------- POSICIONES ---------- */
+  .wallet-filter{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .wallet-filter select{
+    background:var(--bg-panel);border:1px solid var(--border);color:var(--text);
+    border-radius:7px;padding:9px 10px;font-size:12.5px;font-family:var(--sans);outline:none;cursor:pointer;
+  }
+  .wallet-filter button{
+    background:var(--bg-panel);color:var(--text-dim);border:1px solid var(--border);padding:9px 12px;
+    border-radius:7px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--sans);white-space:nowrap;
+  }
+  .wallet-filter button.primary{background:var(--mint);color:#04211a;border-color:var(--mint);}
+  .wallet-filter .spacer{flex:1;}
+  .wallets-table-wrap{
+    flex:1;overflow:auto;border:1px solid var(--border);border-radius:10px;background:var(--bg-panel);min-height:0;
+  }
+  table.wallets-table{width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap;}
+  table.wallets-table thead th{
+    position:sticky;top:0;background:var(--bg-panel-2);color:var(--text-faint);
+    text-transform:uppercase;letter-spacing:.05em;font-size:10px;font-weight:700;
+    text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);
+  }
+  table.wallets-table td{padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text);}
+  table.wallets-table tbody tr:last-child td{border-bottom:none;}
+  table.wallets-table tbody tr:hover{background:rgba(151,252,228,0.03);}
+  table.wallets-table td.wt-pos{color:var(--mint);}
+  table.wallets-table td.wt-neg{color:var(--red);}
+  .wallets-empty{text-align:center;color:var(--text-faint);padding:28px 12px !important;white-space:normal;}
+  .side-badge{
+    display:inline-block;padding:2px 8px;border-radius:5px;font-size:10.5px;font-weight:800;
+    font-family:var(--mono);letter-spacing:.03em;
+  }
+  .side-badge.long{background:rgba(95,227,184,0.14);color:var(--mint);}
+  .side-badge.short{background:rgba(255,107,107,0.14);color:var(--red);}
+  .wt-mono{font-family:var(--mono);}
+  .wt-lev{font-family:var(--mono);font-size:10.5px;padding:1px 6px;border-radius:4px;margin-left:6px;}
+  .liq-risk{padding:2px 8px;border-radius:5px;font-weight:800;}
+  tr.wt-stale{opacity:0.6;}
+  .wt-stale-dot{color:var(--gold);font-size:8px;vertical-align:middle;}
+  .wallets-status{font-size:11px;color:var(--text-faint);font-family:var(--mono);}
+
+  /* ---------- LIQUIDADAS ---------- */
+  .wallets-liq-hint{font-size:11.5px;color:var(--text-faint);flex:1;}
+  #walletsLiqClearBtn{background:rgba(255,107,107,0.12);color:var(--red);border:1px solid rgba(255,107,107,0.3);}
+  .wallets-liq-history{display:flex;flex-direction:column;gap:8px;padding:10px;}
+  .wlh-row{
+    display:flex;align-items:center;gap:10px;background:var(--bg-panel);border:1px solid var(--border);
+    border-radius:9px;padding:10px 12px;font-size:11.5px;
+  }
+  .wlh-icon{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;background:rgba(255,107,107,0.14);color:var(--red);}
+  .wlh-body{flex:1;min-width:0;}
+  .wlh-title{font-weight:700;color:var(--text);}
+  .wlh-sub{color:var(--text-faint);font-family:var(--mono);font-size:10.5px;margin-top:2px;}
+  .wlh-time{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);white-space:nowrap;text-align:right;flex-shrink:0;}
+
+  /* ---------- MODALES (detalle de wallet / gráfico) ---------- */
+  .sheet-backdrop{
+    position:fixed;inset:0;background:rgba(3,10,9,0.72);z-index:60;
+    display:none;align-items:flex-end;justify-content:center;
+  }
+  .sheet{
+    width:100%;max-width:680px;max-height:88vh;background:var(--bg-panel-2);border:1px solid var(--border-strong);
+    border-radius:16px 16px 0 0;display:flex;flex-direction:column;overflow:hidden;
+  }
+  @media (min-width:700px){
+    .sheet-backdrop{align-items:center;}
+    .sheet{border-radius:16px;max-height:82vh;}
+  }
+  .sheet-head{display:flex;align-items:flex-start;justify-content:space-between;padding:16px;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .sheet-title{font-size:16px;font-weight:800;color:var(--text);}
+  .sheet-subtitle{font-family:var(--mono);font-size:11px;color:var(--text-faint);margin-top:2px;}
+  .sheet-close{background:var(--bg-panel);border:1px solid var(--border);color:var(--text-dim);width:30px;height:30px;border-radius:50%;font-size:14px;cursor:pointer;flex-shrink:0;}
+
+  .wallet-modal-summary{display:flex;gap:22px;padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .wm-stat{display:flex;flex-direction:column;gap:2px;}
+  .wm-stat .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint);}
+  .wm-stat .val{font-family:var(--mono);font-size:15px;font-weight:800;color:var(--text);}
+  .sheet-section-title{
+    font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint);font-weight:700;
+    padding:12px 16px 6px;flex-shrink:0;
+  }
+  .wallet-modal-positions{padding:0 16px 16px;display:flex;flex-direction:column;gap:8px;flex:1;overflow-y:auto;min-height:0;}
+  .wm-pos-row{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--bg-panel);
+    border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px;flex-wrap:wrap;
+  }
+
+  /* ---------- PANEL DE GRÁFICO ---------- */
+  .chart-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .chart-controls select{
+    background:var(--bg-panel);border:1px solid var(--border);color:var(--text);
+    border-radius:7px;padding:8px 10px;font-size:12px;font-family:var(--sans);outline:none;cursor:pointer;
+  }
+  .cm-tf-row{display:flex;gap:4px;flex-wrap:wrap;}
+  .cm-tf-btn{
+    background:var(--bg-panel);border:1px solid var(--border);color:var(--text-dim);
+    padding:7px 10px;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:var(--mono);
+  }
+  .cm-tf-btn.active{background:var(--mint);color:#04211a;border-color:var(--mint);}
+  .chart-controls .spacer{flex:1;}
+  .chart-controls button.refresh-btn{
+    background:var(--bg-panel);border:1px solid var(--border);color:var(--mint);
+    padding:8px 12px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);
+  }
+  .chart-controls button.refresh-btn.active{background:var(--mint);color:#04211a;border-color:var(--mint);}
+  .chart-note{font-size:10.5px;color:var(--text-faint);padding:0 16px;flex-shrink:0;font-family:var(--mono);}
+  #chartShareArea{display:flex;flex-direction:column;flex:1;min-height:0;background:var(--bg);}
+  .chart-stats{
+    display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 9px;padding:7px 14px;background:var(--bg-panel);
+    border-bottom:1px solid var(--border);flex-shrink:0;font-family:var(--mono);font-size:11.5px;
+    color:var(--text-dim);line-height:1.35;
+  }
+  .chart-stats b{color:var(--text);font-weight:800;}
+  .chart-stats .wt-pos{color:var(--mint);font-weight:800;}
+  .chart-stats .wt-neg{color:var(--red);font-weight:800;}
+  .chart-stats .cs-sep{color:var(--text-faint);}
+  .chart-body-wrap{flex:1;position:relative;min-height:280px;background:var(--bg);}
+  #miniChart{position:absolute;inset:0;}
+  #chartLiqCanvas{position:absolute;inset:0;pointer-events:none;}
+  .chart-empty{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:var(--text-faint);font-size:12.5px;text-align:center;padding:20px;
+  }
+  .chart-loading{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(7,16,15,0.55);color:var(--text-dim);font-size:12px;font-family:var(--mono);
+  }
+  .chart-loading.show{display:flex;}
+  .chart-legend{display:flex;gap:14px;padding:10px 16px;flex-wrap:wrap;border-top:1px solid var(--border);flex-shrink:0;}
+  .chart-legend div{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--text-dim);}
+  .chart-legend .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+
+  .icon-btn{position:relative;}
+  .badge{position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--red);color:#1a0505;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);max-width:92vw;background:var(--bg-panel-2);border:1px solid var(--border-strong);color:var(--text);padding:11px 16px;border-radius:10px;font-size:13px;z-index:90;box-shadow:0 8px 28px rgba(0,0,0,.5);cursor:pointer;}
+  .toast.err{border-color:var(--red-dim);}
+  .alerts-actions,.wm-links{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border);}
+  .alerts-actions button,.wm-links button,.wm-links a,.tool-row button{background:var(--bg-panel);border:1px solid var(--border);color:var(--text-dim);padding:7px 11px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);text-decoration:none;}
+  .alerts-list{overflow-y:auto;padding:6px 16px 16px;}
+  .alert-row{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;}
+  .alert-row.unread{background:linear-gradient(90deg,rgba(95,227,184,.07),transparent);}
+  .alert-row .ai{font-size:16px;flex-shrink:0;}
+  .alert-row .at{color:var(--text-faint);font-size:11px;font-family:var(--mono);margin-top:2px;}
+  .tool-row{display:flex;gap:6px;flex-wrap:wrap;padding:0 16px 10px;}
+  .wallet-filter input[type=search]{background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:7px;font-size:12px;min-width:0;flex:1 1 110px;}
+  .wsum{display:flex;gap:8px;flex-wrap:wrap;padding:8px 16px;}
+  .wsum div{background:var(--bg-panel);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:11px;color:var(--text-faint);}
+  .wsum b{display:block;font-family:var(--mono);font-size:13px;color:var(--text);}
+  .dist{font-size:10px;color:var(--text-faint);margin-top:2px;}
+
+  .wm-body{flex:1;min-height:0;overflow-y:auto;padding-bottom:16px;}
+  .wm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px;padding:12px 16px;}
+  .wm-grid .wm-stat{background:var(--bg-panel);border:1px solid var(--border);border-radius:9px;padding:8px 10px;}
+  .wm-grid .wm-stat .val{font-size:13px;}
+  .wm-cards,.wm-act{display:flex;flex-direction:column;gap:9px;padding:0 16px;}
+  .wm-card{background:var(--bg-panel);border:1px solid var(--border);border-radius:11px;padding:11px 12px;}
+  .wm-card.flash,.alert-row.flash{animation:flash 2.4s ease-out;}
+  @keyframes flash{0%,60%{box-shadow:0 0 0 2px var(--mint);background:rgba(95,227,184,.12);}100%{box-shadow:0 0 0 0 transparent;}}
+  .wm-card-head{display:flex;align-items:center;gap:8px;margin-bottom:9px;font-weight:800;flex-wrap:wrap;}
+  .wm-card-head .tag{font-size:10px;padding:2px 7px;border-radius:6px;background:rgba(95,227,184,.14);color:var(--mint);font-weight:800;}
+  .wm-card-head .tag.red{background:rgba(255,107,107,.14);color:var(--red);}
+  .wm-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px 10px;}
+  .wm-fields .f .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint);}
+  .wm-fields .f .v{font-family:var(--mono);font-size:12.5px;font-weight:700;color:var(--text);}
+  .wm-fields .f .v.wt-pos{color:var(--mint);} .wm-fields .f .v.wt-neg{color:var(--red);}
+  .wm-fields .f .sub{font-size:10px;color:var(--text-faint);font-family:var(--mono);}
+  .wm-liq{border-color:var(--red-dim);}
+  .wm-line{font-size:11.5px;color:var(--text-dim);margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);}
+  tr.clickable,.wlh-row,.alert-row.clickable{cursor:pointer;}
+  .alert-title{font-weight:800;font-size:13px;}
+  .alert-text{white-space:pre-line;color:var(--text-dim);font-size:12.5px;margin-top:2px;line-height:1.45;}
+  .tag24{display:inline-block;font-size:9px;font-weight:800;padding:1px 5px;border-radius:5px;background:rgba(95,227,184,.16);color:var(--mint);margin-left:4px;}
+
+  .alerts-settings{padding:12px 16px;border-bottom:1px solid var(--border);display:none;flex-direction:column;gap:10px;font-size:12.5px;color:var(--text-dim);}
+  .alerts-settings .row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .alerts-settings input[type=number]{width:120px;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:7px;font-family:var(--mono);font-size:12.5px;text-align:right;}
+  .alerts-settings .types{display:flex;flex-wrap:wrap;gap:8px 14px;}
+  .alerts-settings label{display:flex;align-items:center;gap:6px;cursor:pointer;}
+  .alerts-settings .hint{font-size:11px;color:var(--text-faint);line-height:1.4;}
+  .alert-row.quiet{opacity:.55;}
+  .alert-row.unread.quiet{opacity:1;}
+  .alert-group{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mint);padding:10px 0 4px;}
+  .alert-row .quiet-tag{font-size:9.5px;color:var(--text-faint);border:1px solid var(--border);border-radius:5px;padding:0 5px;margin-left:6px;}
+
+  .assetchips{display:flex;flex-wrap:wrap;gap:6px;max-height:150px;overflow-y:auto;padding:2px 0;}
+  .chipa{padding:4px 9px;border-radius:14px;border:1px solid var(--border);background:var(--bg-panel);font-family:var(--mono);font-size:11.5px;color:var(--text-dim);cursor:pointer;}
+  .chipa.on{background:rgba(95,227,184,.16);border-color:var(--mint);color:var(--mint);}
+  .alerts-settings select,.alerts-settings input[type=search]{background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:7px;font-size:12.5px;}
+  .alerts-settings .mini{display:flex;gap:6px;flex-wrap:wrap;}
+  .alerts-settings .mini button{background:var(--bg-panel);border:1px solid var(--border);color:var(--text-dim);padding:5px 9px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="topbar">
+    <div class="brand"><span class="dot live"></span>WHALEWATCH<small>Monitor de wallets · Hyperliquid + Lighter</small></div>
+    <div class="topbar-status" id="topbarStatus"></div>
+    <div class="topbar-right">
+      <div class="toggle on" id="autoToggle" role="switch" aria-checked="true" tabindex="0" title="Actualización automática de wallets">
+        <div class="switch"></div><span class="toggle-label">Auto</span>
+      </div>
+      <div class="icon-btn" id="bellBtn" role="button" tabindex="0" aria-label="Alertas">🔔<span class="badge" id="bellBadge" style="display:none">0</span></div>
+      <div class="icon-btn" id="refreshAllBtn" role="button" tabindex="0" aria-label="Actualizar todas las wallets">⟳ <span class="toggle-label">Actualizar</span></div>
+    </div>
+  </div>
+
+  <div class="wsub-tabs">
+    <button type="button" class="wsub-tab active" id="wsubManageBtn" data-wsub="manage">Wallets</button>
+    <button type="button" class="wsub-tab" id="wsubPositionsBtn" data-wsub="positions">Posiciones</button>
+    <button type="button" class="wsub-tab" id="wsubLiquidatedBtn" data-wsub="liquidated">Liquidadas</button>
+    <button type="button" class="wsub-tab" id="wsubFavBtn" data-wsub="fav">★ Favoritas</button>
+  </div>
+
+  <div class="wsub-page" id="wsubPageManage">
+    <div class="wallet-add">
+      <input type="text" id="walletAddrInput" placeholder="Dirección de wallet 0x…" autocomplete="off" spellcheck="false">
+      <input type="text" id="walletNameInput" placeholder="Nombre (opcional)" autocomplete="off">
+      <select id="walletExSelect" aria-label="Exchange"><option value="hl">Hyperliquid</option><option value="lt">Lighter</option><option value="both">Ambos</option></select>
+      <button type="button" id="walletAddBtn">+ Añadir wallet</button>
+    </div>
+    <div class="wallets-add-status" id="walletsAddStatus"></div>
+    <div class="scan-toggle"><button type="button" id="scanToggleBtn">🔍 Escanear / importar desde Litscan o Hypurrscan</button></div>
+    <div class="scan-panel" id="scanPanel">
+      <textarea id="scanText" placeholder="Pega aquí direcciones 0x…, enlaces de litscan / hypurrscan o cualquier texto: se detectan todas las wallets" spellcheck="false"></textarea>
+      <div class="scan-row">
+        <select id="scanExSelect" aria-label="Exchange del escaneo"><option value="auto">Auto (según la fuente)</option><option value="hl">Hyperliquid</option><option value="lt">Lighter</option><option value="both">Ambos</option></select>
+        <button type="button" id="scanPasteBtn">📋 Pegar</button>
+        <button type="button" class="primary" id="scanRunBtn">Escanear y añadir</button>
+      </div>
+      <div class="scan-row">
+        <label><input type="checkbox" id="scanAutoChk"> Detectar y añadir automáticamente al volver a la app (portapapeles)</label>
+        <button type="button" id="scanClearRegBtn">Limpiar registro</button>
+      </div>
+      <div class="scan-hint">Las wallets ya añadidas o ya escaneadas se rechazan, se etiquetan y no se vuelven a escanear. Registro: <span id="scanRegCount">0</span>.</div>
+      <div class="scan-results" id="scanResults"></div>
+    </div>
+    <div class="tool-row"><button type="button" id="exportJsonBtn">⬇ Exportar respaldo</button><button type="button" id="importJsonBtn">⬆ Importar respaldo</button><input type="file" id="importFile" accept="application/json,.json" hidden></div>
+    <div class="wallet-filter" id="wlToolbar">
+      <input type="search" id="wlSearch" placeholder="Buscar nombre o dirección…" aria-label="Buscar wallet">
+      <select id="wlSort" aria-label="Ordenar wallets"><option value="added">Orden: añadidas</option><option value="balance">Balance</option><option value="pnl">PnL</option><option value="name">Nombre / número</option><option value="fav">★ Favoritas primero</option></select>
+      <select id="wlEx" aria-label="Filtrar exchange"><option value="">Todos</option><option value="hl">Hyperliquid</option><option value="lt">Lighter</option></select>
+      <span class="wl-count" id="wlCount"></span>
+    </div>
+    <div class="wallets-list" id="walletsList">
+      <div class="wallets-empty-hint">Añade una dirección de Hyperliquid o Lighter para empezar a monitorearla. Los nombres que le pongas se guardan en este dispositivo.</div>
+    </div>
+  </div>
+
+  <div class="wsub-page" id="wsubPagePositions" style="display:none;">
+    <div class="wallet-filter">
+      <select id="walletAssetFilter" aria-label="Filtrar por activo"><option value="">Todos los activos</option></select>
+      <input type="search" id="walletSearch" placeholder="Buscar wallet, activo…" aria-label="Buscar">
+      <select id="walletSort" aria-label="Ordenar por"><option value="balance">Orden: Balance</option><option value="notional">Nocional</option><option value="pnl">PnL</option><option value="risk">Riesgo liq.</option><option value="name">Wallet</option></select>
+      <button type="button" id="walletRefreshBtn">⟳ Actualizar</button>
+      <div class="spacer"></div>
+      <button type="button" id="csvBtn">⬇ CSV</button>
+      <button type="button" id="sharePositionsBtn" aria-label="Compartir">🔗 Compartir</button>
+      <button type="button" class="primary" id="openChartBtn">📈 Gráfico</button>
+    </div>
+    <div class="wsum" id="walletsSummary"></div>
+    <div class="wallets-table-wrap">
+      <table class="wallets-table">
+        <thead>
+          <tr><th>Wallet</th><th>Activo</th><th>Dirección</th><th>Entrada</th><th>Nocional</th><th>PnL</th><th>Balance</th><th>Liquidación</th><th>Inicio de la posición</th><th>Últimas 24 h</th></tr>
+        </thead>
+        <tbody id="walletsTableBody">
+          <tr><td colspan="10" class="wallets-empty">Sin wallets monitoreadas todavía.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="wallets-status" id="walletsStatus"></div>
+  </div>
+
+  <div class="wsub-page" id="wsubPageLiquidated" style="display:none;">
+    <div class="wallet-filter">
+      <span class="wallets-liq-hint">Wallets monitoreadas que fueron liquidadas (detectado automáticamente).</span>
+      <button type="button" id="walletsLiqClearBtn">🗑 Eliminar historial</button>
+    </div>
+    <div class="wallets-table-wrap">
+      <div id="walletsLiqHistoryList" class="wallets-liq-history"></div>
+    </div>
+  </div>
+
+  <div class="wsub-page" id="wsubPageFav" style="display:none;">
+    <div class="fav-grid" id="favStats"></div>
+    <div class="fav-box"><div class="fb-h">🌐 Exposición conjunta por activo</div><div id="favExpo"></div></div>
+    <div class="fav-box"><div class="fb-h">＋ Añadir a favoritas</div>
+      <div class="fav-row"><input id="favAddr" placeholder="Pega una dirección 0x…" spellcheck="false"><select id="favAddEx" aria-label="Exchange"><option value="hl">Hyperliquid</option><option value="lt">Lighter</option></select><button type="button" id="favAddBtn">Añadir</button></div>
+      <details id="favPickBox"><summary>Elegir entre mis wallets monitoreadas</summary>
+        <div class="fav-row" style="margin-top:6px"><input type="search" id="favPick" placeholder="Buscar por nombre o dirección…"></div><div id="favPickList"></div></details></div>
+    <div class="wallet-filter"><input type="search" id="favSearch" placeholder="Buscar favorita…" aria-label="Buscar favorita"><select id="favSort" aria-label="Ordenar favoritas"><option value="risk">Más cerca de liquidación</option><option value="balance">Balance</option><option value="pnl">PnL no realizado</option><option value="lev">Apalancamiento efectivo</option><option value="expo">Exposición total</option><option value="act">Actividad 24 h</option><option value="name">Nombre / número</option><option value="added">Añadidas</option></select><select id="favFilter" aria-label="Filtrar favoritas"><option value="all">Todas</option><option value="risk">En riesgo (&lt;10%)</option><option value="long">Sesgo long</option><option value="short">Sesgo short</option><option value="alerts">Con alertas sin leer</option><option value="nopos">Sin posiciones</option></select><span class="wl-count" id="favCount"></span></div>
+    <div id="favList"></div>
+    <div class="fav-box"><div class="fb-h">🔔 Actividad reciente de favoritas</div><div id="favFeed"></div></div>
+  </div>
+
+  <!-- ---- Detalle de wallet ---- -->
+  <div class="sheet-backdrop" id="walletModalBackdrop">
+    <div class="sheet" id="walletModal">
+      <div class="sheet-head">
+        <div>
+          <div class="sheet-title" id="wmTitle">Wallet</div>
+          <div class="sheet-subtitle" id="wmAddr"></div>
+        </div>
+        <button type="button" class="sheet-close" id="wmCloseBtn" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="wm-links"><button type="button" id="wmFavBtn">☆ Favorita</button><button type="button" id="wmCopyBtn">📋 Copiar dirección</button><a id="wmExplorer" target="_blank" rel="noopener">Explorador ↗</a></div>
+      <div class="wm-body" id="wmBody">
+        <div class="wm-grid" id="wmSummary"></div>
+        <div class="sheet-section-title">Posiciones abiertas</div>
+        <div class="wm-cards" id="wmPositions"></div>
+        <div class="sheet-section-title">Operaciones de las últimas 24 h</div>
+        <div class="wm-act" id="wmActivity"></div>
+        <div class="sheet-section-title" id="wmLiqTitle" style="display:none">Liquidaciones</div>
+        <div class="wm-act" id="wmLiqs"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---- Alertas ---- -->
+  <div class="sheet-backdrop" id="alertsBackdrop">
+    <div class="sheet">
+      <div class="sheet-head"><div><div class="sheet-title">Alertas</div><div class="sheet-subtitle" id="alertsSub"></div></div>
+        <button type="button" class="sheet-close" id="alertsCloseBtn" aria-label="Cerrar">✕</button></div>
+      <div class="alerts-actions"><button type="button" id="alertsReadBtn">Marcar leídas</button><button type="button" id="alertsClearBtn">Borrar todas</button><button type="button" id="alertsNotifBtn">Avisos del sistema</button><button type="button" id="alertsCfgBtn">⚙ Qué me avisa</button></div>
+      <div class="alerts-settings" id="alertsSettings"></div>
+      <div class="alerts-list" id="alertsList"></div>
+    </div>
+  </div>
+
+  <!-- ---- Panel de gráfico ---- -->
+  <div class="sheet-backdrop" id="chartModalBackdrop">
+    <div class="sheet" id="chartModal" style="height:88vh;">
+      <div class="sheet-head">
+        <div>
+          <div class="sheet-title" id="cmTitle">Gráfico</div>
+        </div>
+        <button type="button" class="sheet-close" id="cmCloseBtn">✕</button>
+      </div>
+      <div class="chart-controls">
+        <select id="chartAssetSelect"></select>
+        <div class="cm-tf-row" id="chartTfRow"></div>
+        <div class="spacer"></div>
+        <button type="button" class="refresh-btn active" id="toggleLiqLinesBtn" title="Mostrar/ocultar líneas de liquidación">📏</button>
+        <button type="button" class="refresh-btn" id="shareChartBtn" title="Compartir imagen del gráfico">🔗</button>
+        <button type="button" class="refresh-btn" id="chartRefreshBtn">⟳</button>
+      </div>
+      <div class="chart-note" id="chartNote">Se actualiza cada pocos minutos (no en vivo). Usa ⟳ para forzar una actualización.</div>
+      <div id="chartShareArea">
+        <div class="chart-stats" id="chartStats"></div>
+        <div class="chart-body-wrap" id="chartBodyWrap">
+          <div id="miniChart"></div>
+          <canvas id="chartLiqCanvas"></canvas>
+          <div class="chart-empty" id="chartEmpty" style="display:none;">Ninguna wallet monitoreada tiene posiciones abiertas todavía.</div>
+          <div class="chart-loading" id="chartLoading">Cargando velas…</div>
+        </div>
+      </div>
+      <div class="chart-legend">
+        <div><span class="dot" style="background:#5FE3B8"></span> Liquidación ≤ 3×</div>
+        <div><span class="dot" style="background:#F5D76E"></span> 3× – 10×</div>
+        <div><span class="dot" style="background:#FF9F45"></span> 10× – 25×</div>
+        <div><span class="dot" style="background:#FF6B6B"></span> &gt; 25×</div>
+      </div>
+      <div class="chart-legend" style="padding-top:0;">
+        <div>Mapa (barras del margen derecho): <span style="color:#FF6B6B;font-weight:800;">rojo</span> = shorts sobre el precio, <span style="color:#5FE3B8;font-weight:800;">verde</span> = longs bajo el precio</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================= CONFIG ============================= */
+const API = "https://api.hyperliquid.xyz/info";
+const TIMEFRAMES = [
+  {label:"1m", value:"1m"}, {label:"5m", value:"5m"}, {label:"15m", value:"15m"},
+  {label:"30m", value:"30m"}, {label:"1h", value:"1h"}, {label:"4h", value:"4h"},
+  {label:"1D", value:"1d"}, {label:"1S", value:"1w"}
+];
+const INTERVAL_MS = {
+  "1m":60e3, "5m":300e3, "15m":900e3, "30m":1800e3,
+  "1h":3600e3, "4h":14400e3, "1d":86400e3, "1w":604800e3
+};
+const CHART_CANDLE_COUNT = 300;
+const CHART_AUTO_REFRESH_MS = 180000;  // el gráfico no es en vivo: se refresca cada 3 minutos
+const WALLET_POLL_MS = 20000;          // refresco de posiciones/wallets monitoreadas
+const MARKET_CTX_POLL_MS = 20000;      // refresco de precios de referencia (para riesgo de liquidación)
+const SETTINGS_KEY = "wwSettings_v1";
+const WALLETS_KEY = "wwMonitoredWallets_v1";
+const WALLET_POSITIONS_CACHE_KEY = "wwWalletPositionsCache_v1";
+const WALLET_LIQ_EVENTS_KEY = "wwWalletLiqEvents_v1";
+const LEV_BANDS = [
+  {max:3,   color:"#5FE3B8"},
+  {max:10,  color:"#F5D76E"},
+  {max:25,  color:"#FF9F45"},
+  {max:Infinity, color:"#FF6B6B"}
+];
+
+const el = (id) => document.getElementById(id);
+
+/* ============================= HELPERS ============================= */
+function fmtPrice(p){
+  if(p === null || p === undefined || isNaN(p)) return "—";
+  const abs = Math.abs(p);
+  if(abs === 0) return "0";
+  if(abs >= 1000) return p.toLocaleString("en-US",{maximumFractionDigits:2, minimumFractionDigits:2});
+  if(abs >= 1) return p.toLocaleString("en-US",{maximumFractionDigits:4, minimumFractionDigits:2});
+  if(abs >= 0.01) return p.toFixed(6);
+  return p.toPrecision(4);
+}
+function fmtUsd(v){
+  if(v === null || v === undefined || isNaN(v)) return "—";
+  const abs = Math.abs(v);
+  const sign = v < 0 ? "-" : "";
+  if(abs >= 1e9) return sign+"$"+(abs/1e9).toFixed(2)+"B";
+  if(abs >= 1e6) return sign+"$"+(abs/1e6).toFixed(2)+"M";
+  if(abs >= 1e3) return sign+"$"+(abs/1e3).toFixed(2)+"K";
+  return sign+"$"+abs.toFixed(2);
+}
+function nowSec(){ return Math.floor(Date.now()/1000); }
+function leverageColor(lev){
+  if(lev === null || lev === undefined || isNaN(lev)) return "#7C958E";
+  const band = LEV_BANDS.find(b => lev <= b.max);
+  return band ? band.color : "#FF6B6B";
+}
+function liqRiskColor(distPct){
+  if(distPct == null || isNaN(distPct)) return "#7C958E";
+  const capped = Math.max(0, Math.min(distPct, 25));
+  const hue = (capped/25) * 130;
+  return `hsl(${hue.toFixed(0)}, 82%, 56%)`;
+}
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+let rateLimitUntil = 0; // si la API responde 429, todas las peticiones esperan hasta este instante
+async function apiPost(body, timeoutMs, retries){
+  retries = retries || 0;
+  for(let attempt = 0; ; attempt++){
+    const wait = rateLimitUntil - Date.now();
+    if(wait > 0) await sleep(wait);
+    const ctrl = new AbortController();
+    const t = setTimeout(()=>ctrl.abort(), timeoutMs || 10000);
+    try{
+      const res = await fetch(API, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(body),
+        signal: ctrl.signal
+      });
+      if(res.status === 429){
+        rateLimitUntil = Math.max(rateLimitUntil, Date.now() + 2500 + Math.random()*1500);
+        const e = new Error("HTTP 429"); e.retryable = true; throw e;
+      }
+      if(res.status >= 500){ const e = new Error("HTTP "+res.status); e.retryable = true; throw e; }
+      if(!res.ok) throw new Error("HTTP "+res.status);
+      return await res.json();
+    } catch(e){
+      const retryable = e.retryable || e.name === "AbortError" || e instanceof TypeError;
+      if(!retryable || attempt >= retries) throw e;
+      await sleep(500 * Math.pow(2, attempt) + Math.random()*400);
+    } finally {
+      clearTimeout(t);
+    }
+  }
+}
+function mapCandles(raw){
+  return raw.map(c=>({
+    time: Math.floor(c.t/1000),
+    open: parseFloat(c.o), high: parseFloat(c.h),
+    low: parseFloat(c.l), close: parseFloat(c.c),
+    volume: parseFloat(c.v)
+  })).sort((a,b)=>a.time-b.time);
+}
+async function hlFetchCandles(coin, interval, count, timeoutMs){
+  const ms = INTERVAL_MS[interval];
+  const endTime = Date.now();
+  const startTime = endTime - count*ms - ms;
+  const raw = await apiPost({type:"candleSnapshot", req:{coin, interval, startTime, endTime}}, timeoutMs);
+  return mapCandles(raw || []);
+}
+async function fetchMetaAndCtxs(timeoutMs, retries){
+  const res = await apiPost({type:"metaAndAssetCtxs"}, timeoutMs, retries);
+  return { universe: res[0].universe, ctxs: res[1] };
+}
+
+/* LT_BEGIN ============================= LIGHTER (v9.5) ============================= */
+const LT_API = "https://mainnet.zklighter.elliot.ai";
+const LT_WS = "wss://mainnet.zklighter.elliot.ai/stream";
+const LT_GAP = 1100;   // separación mínima entre peticiones REST (≈54/min; el límite estándar de Lighter es 60/min)
+function isLtKey(a){ return typeof a === "string" && a.indexOf("lt:") === 0; }
+function realAddr(a){ return isLtKey(a) ? a.slice(3) : a; }
+function exOfKey(a){ return isLtKey(a) ? "lt" : "hl"; }
+function exLabel(a){ return isLtKey(a) ? "Lighter" : "Hyperliquid"; }
+function exTag(a){ return '<span class="ex-tag ' + exOfKey(a) + '">' + (isLtKey(a) ? "LT" : "HL") + '</span>'; }
+const ltNum = (v) => (v === null || v === undefined || v === "" || isNaN(Number(v))) ? null : Number(v);
+
+const lt = { byId: new Map(), bySym: new Map(), ws: null, wsTs: 0, fillsOff: false };
+let ltNextSlot = 0, ltRateUntil = 0;
+
+// GET con espaciado entre peticiones, reintentos y manejo del límite de tasa (429).
+async function ltGet(path, params, timeoutMs, retries){
+  retries = retries || 0;
+  const qs = params ? "?" + Object.keys(params).filter(k => params[k] !== null && params[k] !== undefined)
+    .map(k => encodeURIComponent(k) + "=" + encodeURIComponent(params[k])).join("&") : "";
+  for(let attempt = 0; ; attempt++){
+    const now = Date.now();
+    const slot = Math.max(now, ltNextSlot, ltRateUntil);
+    ltNextSlot = slot + LT_GAP;
+    if(slot > now) await sleep(slot - now);
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs || 12000);
+    try{
+      const res = await fetch(LT_API + path + qs, { signal: ctrl.signal });
+      if(res.status === 429){
+        ltRateUntil = Math.max(ltRateUntil, Date.now() + 4000 + Math.random() * 2000);
+        const e = new Error("HTTP 429"); e.retryable = true; e.status = 429; throw e;
+      }
+      if(res.status >= 500){ const e = new Error("HTTP " + res.status); e.retryable = true; e.status = res.status; throw e; }
+      if(!res.ok){ const e = new Error("HTTP " + res.status); e.status = res.status; throw e; }
+      return await res.json();
+    } catch(e){
+      const retryable = e.retryable || e.name === "AbortError" || e instanceof TypeError;
+      if(!retryable || attempt >= retries) throw e;
+      await sleep(600 * Math.pow(2, attempt) + Math.random() * 400);
+    } finally {
+      clearTimeout(t);
+    }
+  }
+}
+
+// Lighter usa "1000PEPE"; Hyperliquid usa "kPEPE". Se unifican para que un mismo activo comparta gráfico.
+function ltNormSym(s){
+  s = String(s == null ? "" : s).trim().toUpperCase().replace(/[-_\/](USD|USDC|PERP)$/, "");
+  const m = s.match(/^1000([A-Z0-9]+)$/);
+  return m ? "k" + m[1] : s;
+}
+function ltPutMarket(id, sym, o){
+  id = Number(id);
+  if(!isFinite(id) || sym == null || sym === "") return;
+  const n = ltNormSym(sym);
+  const m = lt.byId.get(id) || { id: id };
+  m.sym = n; m.raw = sym;
+  if(o) Object.keys(o).forEach(k => { m[k] = o[k]; });
+  lt.byId.set(id, m); lt.bySym.set(n, m);
+}
+function ltApplyStat(ms){
+  if(!ms || ms.symbol == null) return;
+  const mark = ltNum(ms.mark_price), last = ltNum(ms.last_trade_price), fr = ltNum(ms.current_funding_rate);
+  ltPutMarket(ms.market_id, ms.symbol, {
+    mark: mark != null ? mark : last, last: last,
+    change: ltNum(ms.daily_price_change),            // ya viene en %
+    vol: ltNum(ms.daily_quote_token_volume),
+    oiUsd: ltNum(ms.open_interest),
+    funding: fr != null ? fr / 100 : null,           // Lighter lo da en %, la app espera fracción
+    ts: Date.now()
+  });
+}
+function ltMark(sym){ const m = lt.bySym.get(sym); return (m && m.mark != null) ? m.mark : null; }
+function ltStats(sym){
+  const m = lt.bySym.get(sym);
+  if(!m || m.mark == null) return null;
+  return { price: m.mark, change: m.change != null ? m.change : null, vol: m.vol != null ? m.vol : null,
+           oiUsd: m.oiUsd != null ? m.oiUsd : null, funding: m.funding != null ? m.funding : null };
+}
+
+function ltConnectWs(){
+  if(typeof WebSocket === "undefined") return;
+  if(lt.ws && lt.ws.readyState <= 1) return;
+  let ws; try{ ws = new WebSocket(LT_WS); }catch(e){ return; }
+  lt.ws = ws;
+  ws.onopen = () => { try{ ws.send(JSON.stringify({ type: "subscribe", channel: "market_stats/all" })); }catch(e){} };
+  ws.onmessage = (ev) => {
+    let m; try{ m = JSON.parse(ev.data); }catch(e){ return; }
+    if(!m) return;
+    if(m.type === "ping"){ try{ ws.send(JSON.stringify({ type: "pong" })); }catch(e){} return; }
+    const ms = m.market_stats; if(!ms) return;
+    if(ms.symbol != null) ltApplyStat(ms); else Object.keys(ms).forEach(k => ltApplyStat(ms[k]));
+    lt.wsTs = Date.now();
+  };
+  ws.onclose = () => {
+    if(lt.ws === ws) lt.ws = null;
+    setTimeout(() => { if(state.wallets.some(w => isLtKey(w.address))) ltConnectWs(); }, 6000);
+  };
+  ws.onerror = () => { try{ ws.close(); }catch(e){} };
+}
+setInterval(() => { if(lt.ws && lt.ws.readyState === 1){ try{ lt.ws.send(JSON.stringify({ type: "ping" })); }catch(e){} } }, 60000);
+
+// Respaldo por REST si el WebSocket no entrega datos (red restringida, etc.).
+async function ltRefreshMarketsRest(){
+  const d = await ltGet("/api/v1/orderBookDetails", null, 15000, 1);
+  const arr = (d && (d.order_book_details || d.orderBookDetails)) || [];
+  arr.forEach(o => {
+    if(!o || o.market_type === "spot") return;
+    const ex = lt.byId.get(Number(o.market_id));
+    if(ex && ex.ts && Date.now() - ex.ts < 60000) return;
+    const last = ltNum(o.last_trade_price);
+    ltPutMarket(o.market_id, o.symbol, { mark: last, last: last, change: ltNum(o.daily_price_change), vol: ltNum(o.daily_quote_token_volume), ts: Date.now() });
+  });
+}
+async function ltEnsureMarkets(){
+  if(!state.wallets.some(w => isLtKey(w.address))) return;
+  ltConnectWs();
+  if(lt.wsTs && Date.now() - lt.wsTs < 45000) return;
+  await ltRefreshMarketsRest();
+}
+
+async function fetchLighterState(addr, w){
+  const cands = [];
+  [w && w.l1, w && w.raw, addr].forEach(c => { if(c && cands.indexOf(c) < 0) cands.push(c); });
+  let accts = null, lastErr = null;
+  for(const c of cands){
+    try{
+      const d = await ltGet("/api/v1/account", { by: "l1_address", value: c }, 15000, 2);
+      const arr = d && Array.isArray(d.accounts) ? d.accounts : [];
+      if(arr.length){ accts = arr; break; }
+      lastErr = new Error("Sin cuenta Lighter para esta dirección");
+    } catch(e){ lastErr = e; if(e.status !== 400 && e.status !== 404) throw e; }
+  }
+  if(!accts) throw lastErr || new Error("Sin cuenta Lighter para esta dirección");
+
+  const all = [], seen = new Set();
+  const push = (a) => {
+    if(!a) return;
+    const id = a.account_index != null ? a.account_index : a.index;
+    if(id != null){ if(seen.has(id)) return; seen.add(id); }
+    all.push(a);
+    (a.sub_accounts || []).forEach(push);
+  };
+  accts.forEach(push);
+  // Subcuentas que llegan sin detalle de posiciones: se piden por índice (máx. 4).
+  let extra = 0;
+  for(let i = 1; i < all.length; i++){
+    const a = all[i];
+    if(!a.positions && a.account_index != null && extra < 4){
+      extra++;
+      try{
+        const d = await ltGet("/api/v1/account", { by: "index", value: a.account_index }, 15000, 1);
+        const full = d && d.accounts && d.accounts[0];
+        if(full) all[i] = Object.assign({}, a, full);
+      } catch(e){ /* se muestra sin detalle */ }
+    }
+  }
+  const plistOf = (a) => Array.isArray(a.positions) ? a.positions : (a.positions ? Object.values(a.positions) : []);
+
+  let bal = 0, hasBal = false, avail = 0, hasAvail = false;
+  all.forEach(a => {
+    let v = ltNum(a.total_asset_value);
+    if(v == null){
+      const c = ltNum(a.collateral);
+      if(c != null) v = c + plistOf(a).reduce((s, p) => s + (ltNum(p.unrealized_pnl) || 0), 0);
+    }
+    if(v != null){ bal += v; hasBal = true; }
+    const av = ltNum(a.available_balance);
+    if(av != null){ avail += av; hasAvail = true; }
+  });
+
+  const merged = new Map();
+  all.forEach(a => plistOf(a).forEach(p => {
+    const size = Math.abs(ltNum(p.position) || 0);
+    if(!size) return;
+    ltPutMarket(p.market_id, p.symbol, null);
+    const coin = ltNormSym(p.symbol);
+    const side = Number(p.sign) < 0 ? "short" : "long";
+    const entry = ltNum(p.avg_entry_price);
+    const mk = ltMark(coin);
+    let notional = ltNum(p.position_value);
+    notional = notional != null ? Math.abs(notional) : size * (mk != null ? mk : (entry || 0));
+    const liqRaw = ltNum(p.liquidation_price);
+    const isolated = Number(p.margin_mode) === 1;
+    // initial_margin_fraction: según el endpoint llega como % ("5.00"), fracción ("0.05") o puntos base (500).
+    let lev = null;
+    const imf = ltNum(p.initial_margin_fraction);
+    if(imf != null && imf > 0) lev = imf > 100 ? 10000 / imf : (imf >= 1 ? 100 / imf : 1 / imf);
+    if(lev != null && (lev < 1 || lev > 1000)) lev = null;
+    if(lev != null) lev = Math.round(lev * 10) / 10;
+    const alloc = ltNum(p.allocated_margin);
+    const marginUsed = (isolated && alloc != null && alloc > 0) ? alloc : (lev ? notional / lev : null);
+    const pnl = ltNum(p.unrealized_pnl);
+    const fp = ltNum(p.total_funding_paid_out);
+    const pos = {
+      coin: coin, side: side, size: size, entryPx: entry, notional: notional, pnl: pnl,
+      liqPx: (liqRaw != null && liqRaw > 0) ? liqRaw : null,
+      leverage: lev, leverageType: isolated ? "isolated" : "cross", marginUsed: marginUsed,
+      roe: (pnl != null && marginUsed > 0) ? pnl / marginUsed * 100 : null,
+      funding: fp != null ? -fp : null
+    };
+    const k = coin + "|" + side, o = merged.get(k);
+    if(!o){ merged.set(k, pos); return; }
+    // misma posición repartida en varias subcuentas: se suman
+    const sz = o.size + pos.size;
+    o.entryPx = (o.entryPx != null && pos.entryPx != null) ? (o.entryPx * o.size + pos.entryPx * pos.size) / sz : o.entryPx;
+    o.size = sz; o.notional += pos.notional;
+    o.pnl = (o.pnl || 0) + (pos.pnl || 0);
+    o.marginUsed = (o.marginUsed || 0) + (pos.marginUsed || 0);
+    o.funding = (o.funding || 0) + (pos.funding || 0);
+    if(pos.notional > o.notional - pos.notional){ o.liqPx = pos.liqPx; o.leverage = pos.leverage; o.leverageType = pos.leverageType; }
+  }));
+  const positions = Array.from(merged.values());
+  const idxs = all.filter((a, i) => a.account_index != null && (i === 0 || plistOf(a).some(p => Math.abs(ltNum(p.position) || 0) > 0)))
+    .map(a => a.account_index).slice(0, 3);
+  return {
+    positions: positions,
+    accountBalance: hasBal ? bal : null,
+    account: {
+      withdrawable: hasAvail ? avail : null,
+      marginUsed: positions.reduce((s, p) => s + (p.marginUsed || 0), 0) || null,
+      totalNtl: positions.reduce((s, p) => s + p.notional, 0)
+    },
+    ltIdxs: idxs,
+    l1: accts[0] && accts[0].l1_address ? accts[0].l1_address : null
+  };
+}
+
+function ltCandleList(raw){
+  if(!raw) return [];
+  const arr = raw.candlesticks || raw.candles || raw.c || (Array.isArray(raw) ? raw : []);
+  return Array.isArray(arr) ? arr : [];
+}
+function ltMapCandles(list){
+  return list.map(c => {
+    let t = Number(c.t != null ? c.t : c.timestamp);
+    if(t > 1e12) t = t / 1000;
+    const vol = c.v != null ? c.v : (c.volume0 != null ? c.volume0 : (c.volume != null ? c.volume : 0));
+    return { time: Math.floor(t),
+      open: parseFloat(c.o != null ? c.o : c.open), high: parseFloat(c.h != null ? c.h : c.high),
+      low: parseFloat(c.l != null ? c.l : c.low), close: parseFloat(c.c != null ? c.c : c.close),
+      volume: parseFloat(vol) || 0 };
+  }).filter(c => isFinite(c.time) && isFinite(c.open) && isFinite(c.close)).sort((a, b) => a.time - b.time);
+}
+function ltWeekly(candles){
+  const out = [], by = new Map();
+  candles.forEach(c => {
+    const day = Math.floor(c.time / 86400);
+    const wk = (day - ((day + 3) % 7)) * 86400;     // lunes 00:00 UTC
+    const o = by.get(wk);
+    if(!o){ const n = { time: wk, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume }; by.set(wk, n); out.push(n); }
+    else { o.high = Math.max(o.high, c.high); o.low = Math.min(o.low, c.low); o.close = c.close; o.volume += c.volume; }
+  });
+  return out;
+}
+async function ltFetchCandles(coin, interval, count, timeoutMs){
+  const m = lt.bySym.get(coin);
+  if(!m) throw new Error("Mercado Lighter desconocido: " + coin);
+  const weekly = interval === "1w";
+  const res = weekly ? "1d" : interval;
+  const n = count * (weekly ? 7 : 1);
+  const end = Date.now(), start = end - n * INTERVAL_MS[res] - INTERVAL_MS[res];
+  const q = (s, e) => ({ market_id: m.id, resolution: res, start_timestamp: s, end_timestamp: e, count_back: n });
+  let list = ltCandleList(await ltGet("/api/v1/candles", q(start, end), timeoutMs || 20000, 1));
+  if(!list.length) list = ltCandleList(await ltGet("/api/v1/candles", q(Math.floor(start / 1000), Math.floor(end / 1000)), timeoutMs || 20000, 1));
+  let candles = ltMapCandles(list);
+  if(weekly) candles = ltWeekly(candles);
+  return candles.slice(-count);
+}
+async function fetchCandles(coin, interval, count, timeoutMs){
+  const hlKnown = state.universe.some(u => u.name === coin);
+  const ltKnown = lt.bySym.has(coin);
+  const order = (!hlKnown && ltKnown) ? ["lt", "hl"] : ["hl", "lt"];
+  let lastErr = null, lastEmpty = null;
+  for(const src of order){
+    if(src === "lt" && !ltKnown) continue;
+    try{
+      const r = src === "lt" ? await ltFetchCandles(coin, interval, count, timeoutMs) : await hlFetchCandles(coin, interval, count, timeoutMs);
+      if(r && r.length) return r;
+      lastEmpty = r;
+    } catch(e){ lastErr = e; }
+  }
+  if(lastEmpty) return lastEmpty;
+  throw lastErr || new Error("sin datos");
+}
+
+// Operaciones (trades) de la cuenta → mismo formato que los fills de Hyperliquid.
+// Si Lighter exige autenticación para este endpoint, se desactiva y la app usa "antes de <primera vez vista>".
+async function ltLoadFills(key){
+  if(lt.fillsOff) return null;
+  const w = state.wallets.find(x => x.address === key);
+  const idxs = (w && w.ltIdxs) || [];
+  if(!idxs.length) return null;
+  const out = [];
+  for(const idx of idxs.slice(0, 3)){
+    let d;
+    try{ d = await ltGet("/api/v1/trades", { sort_by: "timestamp", sort_dir: "desc", limit: 100, account_index: idx }, 20000, 1); }
+    catch(e){ if(e.status === 400 || e.status === 401 || e.status === 403 || e.status === 404){ lt.fillsOff = true; return null; } throw e; }
+    ltMapTrades(d && d.trades, idx).forEach(f => out.push(f));
+  }
+  return out.sort((a, b) => b.time - a.time);
+}
+function ltMapTrades(trades, idx){
+  const out = [];
+  (Array.isArray(trades) ? trades : []).forEach(t => {
+    const isAsk = Number(t.ask_account_id) === Number(idx), isBid = Number(t.bid_account_id) === Number(idx);
+    if(isAsk === isBid) return;
+    const mk = lt.byId.get(Number(t.market_id));
+    if(!mk) return;
+    const iAmMaker = isAsk ? !!t.is_maker_ask : !t.is_maker_ask;
+    const before = ltNum(iAmMaker ? t.maker_position_size_before : t.taker_position_size_before) || 0;
+    const sz = ltNum(t.size), px = ltNum(t.price);
+    if(!sz || !px) return;
+    const delta = isAsk ? -sz : sz, after = before + delta, eps = 1e-12;
+    let dir;
+    if(Math.abs(before) < eps) dir = "Open " + (delta > 0 ? "Long" : "Short");
+    else if(after * before < 0) dir = (before > 0 ? "Long" : "Short") + " > " + (after > 0 ? "Long" : "Short");
+    else if(Math.abs(after) > Math.abs(before)) dir = "Open " + (before > 0 ? "Long" : "Short");
+    else dir = "Close " + (before > 0 ? "Long" : "Short");
+    let ts = Number(t.timestamp); if(ts < 1e12) ts *= 1000;
+    out.push({ coin: mk.sym, time: ts, px: px, sz: sz, dir: dir, start: Math.abs(before) < eps ? 0 : before, pnl: 0, oid: t.trade_id });
+  });
+  return out;
+}
+/* LT_END */
+
+/* ============================= STATE ============================= */
+function loadWallets(){
+  try{
+    const raw = localStorage.getItem(WALLETS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch(e){ return []; }
+}
+function saveWallets(){
+  try{ localStorage.setItem(WALLETS_KEY, JSON.stringify(state.wallets)); }
+  catch(e){ /* almacenamiento no disponible */ }
+}
+function loadCachedWalletPositions(){
+  try{
+    const raw = localStorage.getItem(WALLET_POSITIONS_CACHE_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch(e){ return []; }
+}
+function saveCachedWalletPositions(){
+  try{ localStorage.setItem(WALLET_POSITIONS_CACHE_KEY, JSON.stringify(state.walletPositions)); }
+  catch(e){ /* almacenamiento no disponible */ }
+}
+function loadCachedWalletLiqEvents(){
+  try{
+    const raw = localStorage.getItem(WALLET_LIQ_EVENTS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch(e){ return []; }
+}
+function saveCachedWalletLiqEvents(){
+  try{ localStorage.setItem(WALLET_LIQ_EVENTS_KEY, JSON.stringify(state.walletLiqEvents)); }
+  catch(e){ /* almacenamiento no disponible */ }
+}
+function loadSettings(){
+  try{ const raw = localStorage.getItem(SETTINGS_KEY); return raw ? JSON.parse(raw) : null; }
+  catch(e){ return null; }
+}
+function saveSettings(){
+  try{
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+      autoRefresh: state.autoRefresh,
+      chartCoin: state.chartCoin,
+      chartInterval: state.chartInterval,
+      chartLiqLinesOn: state.chartLiqLinesOn
+    }));
+  } catch(e){ /* almacenamiento no disponible */ }
+}
+const SAVED = loadSettings() || {};
+
+const state = {
+  wallets: [],
+  walletPositions: [],
+  walletAssetFilter: "",
+  walletLiqEvents: [],
+  walletsLoading: false,
+  autoRefresh: SAVED.autoRefresh !== undefined ? SAVED.autoRefresh : true,
+  universe: [],
+  assetCtxs: [],
+  chartCoin: SAVED.chartCoin || null,
+  chartInterval: SAVED.chartInterval || "15m",
+  chartLastTime: null,
+  chartCandles: null,
+  chartLive: null,
+  chartCandlesCoin: null,
+  chartLiqLinesOn: SAVED.chartLiqLinesOn !== undefined ? SAVED.chartLiqLinesOn : true
+};
+state.wallets = loadWallets();
+state.walletPositions = loadCachedWalletPositions().filter(p => state.wallets.some(w => w.address === p.address));
+state.walletLiqEvents = loadCachedWalletLiqEvents();
+const ACT_TTL = 10 * 60 * 1000, FILL_GAP = 3500;   // ritmo suave: userFills pesa 20 en la API
+let wlSearch = "", wlSort = "added", wlEx = "", wlLimit = 60;
+const DAY = 86400000, OPEN_KEY = "wwOpenTimes_v1", ACT_KEY = "wwAct24_v1";
+let openMap = loadJson(OPEN_KEY, {});   // inicio de cada posición: "addr|coin|side" -> {t, exact, approx, bound}
+let act24 = loadJson(ACT_KEY, {});      // operaciones (fills) de las últimas 24 h por wallet
+Object.keys(act24).forEach(k=>{ const a = act24[k]; if(!a || !Array.isArray(a.list)) delete act24[k]; else a.list = a.list.filter(f => f.time >= Date.now() - DAY); });
+
+/* ============================= PRECIOS DE REFERENCIA ============================= */
+async function refreshMarketCtxs(){
+  try{
+    const {universe, ctxs} = await fetchMetaAndCtxs(15000, 2);
+    state.universe = universe;
+    state.assetCtxs = ctxs;
+  } catch(e){ /* si falla, se sigue usando el último precio conocido */ }
+  try{ await ltEnsureMarkets(); } catch(e){ /* Lighter: se conserva el último precio */ }
+}
+const liveMids = {};            // precios en vivo (WebSocket allMids de Hyperliquid)
+let liveMidsAt = 0;
+function hlMark(coin){
+  const lm = liveMids[coin];
+  if(lm != null && Date.now() - liveMidsAt < 30000) return lm;
+  const idx = state.universe.findIndex(u => u.name === coin);
+  if(idx < 0) return null;
+  const ctx = state.assetCtxs[idx];
+  if(!ctx) return null;
+  const v = parseFloat(ctx.markPx);
+  return isNaN(v) ? null : v;
+}
+// ex = "lt" usa primero el precio de Lighter; cualquier otro caso, el de Hyperliquid. Si falta, usa el otro.
+function getMarkPrice(coin, ex){
+  if(ex === "lt"){ const v = ltMark(coin); return v != null ? v : hlMark(coin); }
+  const v = hlMark(coin); return v != null ? v : ltMark(coin);
+}
+// Estadísticas de mercado del activo del gráfico: precio, cambio 24h, volumen,
+// open interest y funding — vienen del mismo metaAndAssetCtxs que ya se refresca
+// junto con las wallets, así que siempre están tan actualizadas como esas.
+function getAssetStats(coin){
+  const idx = state.universe.findIndex(u => u.name === coin);
+  const ctx = idx < 0 ? null : state.assetCtxs[idx];
+  if(!ctx) return ltStats(coin);
+  const mark = parseFloat(ctx.markPx);
+  const prevDay = parseFloat(ctx.prevDayPx);
+  const change = (prevDay > 0 && !isNaN(mark)) ? ((mark - prevDay) / prevDay * 100) : null;
+  const vol = ctx.dayNtlVlm !== undefined ? parseFloat(ctx.dayNtlVlm) : null;
+  const oiCoins = ctx.openInterest !== undefined ? parseFloat(ctx.openInterest) : null;
+  const oiUsd = (oiCoins != null && !isNaN(oiCoins) && !isNaN(mark)) ? oiCoins * mark : null;
+  const funding = ctx.funding !== undefined ? parseFloat(ctx.funding) : null;
+  return {
+    price: isNaN(mark) ? null : mark,
+    change,
+    vol: (vol!=null && !isNaN(vol)) ? vol : null,
+    oiUsd: (oiUsd!=null && !isNaN(oiUsd)) ? oiUsd : null,
+    funding: (funding!=null && !isNaN(funding)) ? funding : null
+  };
+}
+function renderChartStats(){
+  const box = el("chartStats");
+  if(!state.chartCoin){ box.innerHTML = ""; return; }
+  const s = getAssetStats(state.chartCoin);
+  if(!s){
+    box.innerHTML = `<b>${state.chartCoin}</b> <span>Cargando datos…</span>`;
+    return;
+  }
+  const changeCls = s.change > 0 ? "wt-pos" : (s.change < 0 ? "wt-neg" : "");
+  const changeTxt = s.change != null ? (s.change>0?"+":"") + s.change.toFixed(2) + "%" : "—";
+  const fundingTxt = s.funding != null ? (s.funding*100).toFixed(4) + "%" : "—";
+  const sep = '<span class="cs-sep">·</span>';
+  // el precio se pinta según la vela actual: verde si cierra por encima de su apertura, rojo si por debajo
+  const lv = state.chartLive && state.chartLive.coin === state.chartCoin && state.chartLive.interval === state.chartInterval ? state.chartLive : null;
+  const livePx = lv ? lv.close : null;
+  const priceCls = lv ? (lv.close >= lv.open ? "up" : "down") : "";
+  box.innerHTML = `
+    <span>${coinIconHtml(state.chartCoin, 20)}<b>${state.chartCoin}</b> <span class="cs-price ${priceCls}">${fmtPrice(livePx != null ? livePx : s.price)}</span> <span class="${changeCls}">${changeTxt}</span></span>
+    ${sep}<span>Vol ${s.vol!=null?fmtUsd(s.vol):"—"}</span>
+    ${sep}<span>OI ${s.oiUsd!=null?fmtUsd(s.oiUsd):"—"}</span>
+    ${sep}<span>Fund ${fundingTxt}</span>
+  `;
+}
+
+/* ============================= MONITOR DE WALLETS ============================= */
+function isValidHlAddress(addr){
+  return typeof addr === "string" && /^0x[0-9a-f]{40}$/i.test(addr.trim());
+}
+function normalizeAddr(addr){
+  return (addr||"").replace(/\s+/g,"").trim().toLowerCase();
+}
+const ALERT_SIZE_PCT = 25, RISK_ENTER = 10, RISK_EXIT = 15;
+const esc = (v) => String(v == null ? "" : v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+function shortAddr(addr){
+  addr = realAddr(addr);
+  return addr.slice(0,6) + "…" + addr.slice(-4);
+}
+function walletLabel(w){
+  return (w.name && w.name.trim()) ? w.name.trim() : shortAddr(w.address);
+}
+function setWalletAddStatus(msg, kind){
+  const box = el("walletsAddStatus");
+  box.textContent = msg || "";
+  box.className = "wallets-add-status" + (kind ? " "+kind : "");
+}
+
+// Numeración automática: toma el mayor nombre numérico existente (1, 2, 3…) y continúa con el siguiente.
+function nextWalletNumber(){
+  let max = 0;
+  state.wallets.forEach(w=>{ const n = String(w.name || "").trim(); if(/^\d+$/.test(n)) max = Math.max(max, parseInt(n, 10)); });
+  return String(max + 1);
+}
+function addWalletEntry(address, name, ex){
+  const rawAddr = String(address || "").replace(/\s+/g, "");
+  address = normalizeAddr(address);
+  if(!isValidHlAddress(address)){
+    setWalletAddStatus("Dirección inválida. Debe ser una dirección 0x (42 caracteres).", "err");
+    return false;
+  }
+  const exs = ex === "both" ? ["hl", "lt"] : [ex === "lt" ? "lt" : "hl"];
+  const added = [];
+  exs.forEach(e => {
+    const key = e === "lt" ? "lt:" + address : address;
+    if(state.wallets.some(w => w.address === key)) return;
+    const w = { address: key, name: (name||"").trim() || nextWalletNumber() };
+    if(e === "lt" && rawAddr !== address) w.raw = rawAddr;   // por si Lighter distingue mayúsculas (checksum)
+    state.wallets.push(w);
+    added.push(e);
+  });
+  if(!added.length){
+    setWalletAddStatus("Esa wallet ya está siendo monitoreada en ese exchange — no se añadió duplicada.", "err");
+    return false;
+  }
+  saveWallets();
+  renderWalletsChips();
+  setWalletAddStatus("Wallet añadida en " + (added.length > 1 ? "Hyperliquid y Lighter" : (added[0] === "lt" ? "Lighter" : "Hyperliquid")) + ". Cargando sus posiciones…", "ok");
+  refreshAllWallets();
+  return true;
+}
+function removeWalletEntry(address){
+  state.wallets = state.wallets.filter(w => w.address !== address);
+  state.walletPositions = state.walletPositions.filter(p => p.address !== address);
+  saveWallets();
+  saveCachedWalletPositions();
+  renderWalletsChips();
+  renderWalletsTable();
+  populateWalletAssetFilter();
+  populateChartAssetOptions();
+}
+function renameWalletEntry(address, newName){
+  const w = state.wallets.find(w => w.address === address);
+  if(!w) return;
+  w.name = (newName||"").trim();
+  saveWallets();
+  renderWalletsChips();
+  renderWalletsTable();
+}
+
+async function fetchWalletState(address, w){
+  if(isLtKey(address)) return fetchLighterState(realAddr(address), w);
+  const data = await apiPost({ type:"clearinghouseState", user: address }, 15000, 2);
+  const positions = Array.isArray(data && data.assetPositions) ? data.assetPositions : [];
+  const accountBalance = (data && data.marginSummary && data.marginSummary.accountValue !== undefined && data.marginSummary.accountValue !== null)
+    ? parseFloat(data.marginSummary.accountValue) : null;
+  const mapped = positions.map(ap=>{
+    const p = ap.position || {};
+    const szi = parseFloat(p.szi);
+    const lev = p.leverage && p.leverage.value !== undefined ? Number(p.leverage.value) : null;
+    return {
+      coin: p.coin,
+      side: szi >= 0 ? "long" : "short",
+      size: Math.abs(szi),
+      entryPx: p.entryPx !== undefined ? parseFloat(p.entryPx) : null,
+      notional: p.positionValue !== undefined ? Math.abs(parseFloat(p.positionValue)) : Math.abs(szi * parseFloat(p.entryPx || 0)),
+      pnl: p.unrealizedPnl !== undefined ? parseFloat(p.unrealizedPnl) : null,
+      liqPx: (p.liquidationPx !== undefined && p.liquidationPx !== null) ? parseFloat(p.liquidationPx) : null,
+      leverage: (lev === null || isNaN(lev)) ? null : lev,
+      leverageType: p.leverage ? p.leverage.type : null,
+      marginUsed: p.marginUsed !== undefined ? parseFloat(p.marginUsed) : null,
+      roe: p.returnOnEquity !== undefined ? parseFloat(p.returnOnEquity) * 100 : null,
+      funding: (p.cumFunding && p.cumFunding.sinceOpen !== undefined) ? -parseFloat(p.cumFunding.sinceOpen) : null
+    };
+  }).filter(pos => pos.coin && pos.size > 0);
+  const ms = (data && data.marginSummary) || {};
+  const account = {
+    withdrawable: (data && data.withdrawable != null) ? parseFloat(data.withdrawable) : null,
+    marginUsed: ms.totalMarginUsed != null ? parseFloat(ms.totalMarginUsed) : null,
+    totalNtl: ms.totalNtlPos != null ? parseFloat(ms.totalNtlPos) : null
+  };
+  return { positions: mapped, accountBalance, account };
+}
+
+function detectWalletLiquidations(prevPositions, newPositions){
+  const newKeySet = new Set(newPositions.map(p => p.address+"|"+p.coin));
+  prevPositions.forEach(p=>{
+    if(newKeySet.has(p.address+"|"+p.coin)) return;
+    if(!isLtKey(p.address)){ try{ queueFills(p.address, true); }catch(e){} }   // posición desaparecida: confirmar con el historial real
+    if(!p.liqPx) return;
+    const mark = getMarkPrice(p.coin, exOfKey(p.address));
+    if(mark == null) return;
+    const hit = p.side === "long" ? mark <= p.liqPx * 1.003 : mark >= p.liqPx * 0.997;
+    if(!hit) return;
+    const pctOfAccount = (p.accountBalance && p.accountBalance > 0) ? (p.notional / p.accountBalance * 100) : null;
+    state.walletLiqEvents.push({
+      time: nowSec(), coin: p.coin, price: p.liqPx, name: p.name,
+      side: p.side, leverage: p.leverage, address: p.address,
+      notional: p.notional, leverageType: p.leverageType,
+      accountBalance: p.accountBalance, pctOfAccount,
+      entryPx: p.entryPx, size: p.size, pnl: p.pnl, openTime: (getOpen(p) || {}).t || null
+    });
+  });
+  if(state.walletLiqEvents.length > 300) state.walletLiqEvents = state.walletLiqEvents.slice(-300);
+}
+
+const WALLET_CONCURRENCY = 4;   // peticiones simultáneas máximas (evita el límite de tasa de la API)
+let refreshPromise = null;
+let refreshAgain = false;
+let lastRefreshOk = 0;
+
+// Ejecuta tareas con un máximo de peticiones simultáneas.
+async function runPool(items, worker, limit){
+  let i = 0;
+  const runners = Array.from({length: Math.min(limit, items.length)}, async ()=>{
+    while(i < items.length){
+      const item = items[i++];
+      await worker(item);
+      await sleep(40 + Math.random()*60);
+    }
+  });
+  await Promise.all(runners);
+}
+
+// Nunca corren dos actualizaciones a la vez: si se pide otra mientras hay una en curso,
+// se encadena una más al terminar (útil al añadir una wallet).
+function refreshAllWallets(){
+  if(refreshPromise){ refreshAgain = true; return refreshPromise; }
+  refreshPromise = (async ()=>{
+    try{
+      do{
+        refreshAgain = false;
+        await doRefreshAllWallets();
+      } while(refreshAgain);
+    } catch(e){
+      console.warn("refresh failed", e);
+    } finally {
+      state.walletsLoading = false;
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
+
+async function doRefreshAllWallets(){
+  const wallets = state.wallets.slice();
+  if(!wallets.length){
+    await refreshMarketCtxs();
+    state.walletPositions = [];
+    renderWalletsTable();
+    populateWalletAssetFilter();
+    populateChartAssetOptions();
+    saveCachedWalletPositions();
+    el("walletsStatus").textContent = "";
+    setTopbarStatus();
+    return;
+  }
+  state.walletsLoading = true;
+  el("walletsStatus").textContent = "Actualizando posiciones…";
+  const prevPositions = state.walletPositions;
+  const cycleStart = nowSec(), cycleStartMs = Date.now();
+  const fresh = new Map(); // address -> posiciones nuevas (solo las wallets que respondieron)
+
+  // Precios de referencia en paralelo con las wallets (ya no las bloquean).
+  const ctxPromise = refreshMarketCtxs();
+
+  const mergeAndRender = ()=>{
+    const merged = [];
+    wallets.forEach(w=>{
+      if(w.quickAt && w.quickAt > cycleStartMs) merged.push(...state.walletPositions.filter(p => p.address === w.address));
+      else if(fresh.has(w.address)) merged.push(...fresh.get(w.address));
+      else merged.push(...prevPositions.filter(p => p.address === w.address));
+    });
+    state.walletPositions = merged;
+    renderWalletsChips();
+    renderWalletsTable();
+  };
+
+  let done = 0;
+  const fetchOne = async (w)=>{
+    try{
+      const wsr = await fetchWalletState(w.address, w);
+      const { positions, accountBalance, account } = wsr;
+      if(wsr.ltIdxs) w.ltIdxs = wsr.ltIdxs;
+      if(wsr.l1) w.l1 = wsr.l1;
+      w.error = false;
+      w.accountBalance = accountBalance;
+      w.account = account;
+      w.totalPnl = positions.reduce((sum,p)=> sum + (p.pnl || 0), 0);
+      w.lastOk = Date.now();
+      fresh.set(w.address, positions.map(p => Object.assign({ address:w.address, name: walletLabel(w), accountBalance }, p)));
+    } catch(err){
+      console.warn("wallet fetch failed", w.address, err);
+      w.error = true;
+    }
+    done++;
+    if(done % 5 === 0 && done < wallets.length) mergeAndRender();
+  };
+
+  // Lighter limita a ~60 peticiones/min: va en su propio carril (1 a la vez) para no frenar a Hyperliquid.
+  const hlWs = wallets.filter(w => !isLtKey(w.address)), ltWs = wallets.filter(w => isLtKey(w.address));
+  await Promise.all([runPool(hlWs, fetchOne, WALLET_CONCURRENCY), runPool(ltWs, fetchOne, 1)]);
+
+  // Segunda pasada solo para las que fallaron, tras una breve pausa.
+  let failed = wallets.filter(w => w.error);
+  if(failed.length){
+    await sleep(2500);
+    await Promise.all([runPool(failed.filter(w => !isLtKey(w.address)), fetchOne, 2), runPool(failed.filter(w => isLtKey(w.address)), fetchOne, 1)]);
+  }
+  await ctxPromise;
+
+  // Las que siguen fallando conservan su último dato, marcado como desactualizado.
+  const qa = new Set(wallets.filter(w => w.quickAt && w.quickAt > cycleStartMs).map(w => w.address));
+  const curQuick = state.walletPositions.filter(p => qa.has(p.address));
+  qa.forEach(a => fresh.delete(a));                     // ya vigiladas con datos más nuevos: no se procesan dos veces
+  const prevCmp = prevPositions.filter(p => !qa.has(p.address));
+  const newPositions = [];
+  wallets.forEach(w=>{
+    if(qa.has(w.address)) newPositions.push(...curQuick.filter(p => p.address === w.address));
+    else if(fresh.has(w.address)) newPositions.push(...fresh.get(w.address));
+    else newPositions.push(...prevPositions.filter(p => p.address === w.address).map(p => Object.assign({}, p, { stale: true })));
+  });
+  detectWalletLiquidations(prevCmp.filter(p => fresh.has(p.address)), newPositions.filter(p => fresh.has(p.address)));
+  try{ processAlerts(wallets, prevCmp, fresh, cycleStart); }catch(e){ console.warn("alerts", e); }
+  try{ scheduleFillLookups(wallets, fresh); }catch(e){ console.warn("fills", e); }
+  state.walletPositions = newPositions;
+  state.walletsLoading = false;
+  renderWalletsChips();
+  renderWalletsTable();
+  populateWalletAssetFilter();
+  populateChartAssetOptions();
+  saveCachedWalletPositions();
+  saveCachedWalletLiqEvents();
+  if(el("wsubPageLiquidated").style.display === "flex") renderWalletLiqHistory();
+  if(wmCurrentAddress){
+    const w = state.wallets.find(w=>w.address===wmCurrentAddress);
+    if(w){ renderWalletModalSummary(w); renderWalletModalPositions(wmCurrentAddress); }
+    else closeWalletDetail();
+  }
+  if(chartPanelOpen){ renderChartLiqOverlay(); updateChartMarkers(); renderChartStats(); }
+  const failCount = wallets.filter(w=>w.error).length;
+  if(failCount < wallets.length) lastRefreshOk = Date.now();
+  el("walletsStatus").textContent = "Actualizado " + new Date().toLocaleTimeString() +
+    " · " + (wallets.length - failCount) + "/" + wallets.length + " al día" +
+    (failCount ? " · " + failCount + " sin respuesta (mostrando último dato)" : "");
+  if(failCount === wallets.length) toast("Sin respuesta de los exchanges. Revisa tu conexión.", true);
+  setTopbarStatus();
+}
+function setTopbarStatus(){
+  const n = state.wallets.length;
+  el("topbarStatus").textContent = n
+    ? n + " wallet" + (n===1?"":"s") + " monitoreada" + (n===1?"":"s") + " · " + new Date().toLocaleTimeString()
+    : "Sin wallets monitoreadas";
+}
+
+function renderWalletsChips(){
+  const wrap = el("walletsList");
+  if(!state.wallets.length){
+    wrap.innerHTML = '<div class="wallets-empty-hint">Añade una dirección de Hyperliquid o Lighter para empezar a monitorearla. Los nombres que le pongas se guardan en este dispositivo.</div>';
+    return;
+  }
+  let list = state.wallets.slice();
+  const q = wlSearch.trim().toLowerCase();
+  if(q) list = list.filter(w => (walletLabel(w) + " " + realAddr(w.address) + " " + (w.name || "")).toLowerCase().indexOf(q) >= 0);
+  if(wlEx) list = list.filter(w => isLtKey(w.address) === (wlEx === "lt"));
+  if(wlSort === "balance") list.sort((a,b) => (b.accountBalance ?? -Infinity) - (a.accountBalance ?? -Infinity));
+  else if(wlSort === "pnl") list.sort((a,b) => (b.totalPnl ?? -Infinity) - (a.totalPnl ?? -Infinity));
+  else if(wlSort === "name") list.sort((a,b) => walletLabel(a).localeCompare(walletLabel(b), undefined, { numeric: true }));
+  else if(wlSort === "fav") list.sort((a,b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0));
+  const total = list.length;
+  el("wlCount").textContent = total === state.wallets.length ? total + " wallets" : total + " de " + state.wallets.length;
+  list = list.slice(0, wlLimit);   // se dibujan por tandas para que 500+ wallets no trabe el móvil
+  wrap.innerHTML = (total ? "" : '<div class="wallets-empty-hint">Ninguna wallet coincide con el filtro.</div>') + list.map(w=>{
+    const label = esc(walletLabel(w));
+    const balTxt = w.accountBalance != null ? fmtUsd(w.accountBalance) : "—";
+    const pnlVal = w.totalPnl;
+    const pnlCls = pnlVal > 0 ? "wt-pos" : (pnlVal < 0 ? "wt-neg" : "");
+    const pnlTxt = pnlVal != null ? (pnlVal>0?"+":"") + fmtUsd(pnlVal) : "—";
+    return `<div class="wallet-chip" data-addr="${w.address}">
+      <div class="wc-id">
+        <span class="wc-dot${w.error ? " err" : ""}"></span>
+        <span class="wc-name" data-addr="${w.address}">${label}</span>${exTag(w.address)}
+        ${label === esc(shortAddr(w.address)) ? "" : `<span class="wc-addr">${shortAddr(w.address)}</span>`}
+      </div>
+      <div class="wc-stats">
+        <div class="wc-stat-item"><span class="lbl">Balance</span><span class="val">${balTxt}</span></div>
+        <div class="wc-stat-item"><span class="lbl">PnL</span><span class="val ${pnlCls}">${pnlTxt}</span></div>
+      </div>
+      <div class="wc-actions">
+        <span class="wc-star${w.fav ? " on" : ""}" role="button" tabindex="0" aria-label="Favorita" data-addr="${w.address}" title="Favorita">${w.fav ? "★" : "☆"}</span>
+        <span class="wc-edit" role="button" tabindex="0" aria-label="Renombrar wallet" data-addr="${w.address}" title="Renombrar wallet">✎</span>
+        <span class="wc-x" role="button" tabindex="0" aria-label="Dejar de monitorear" data-addr="${w.address}" title="Dejar de monitorear">×</span>
+      </div>
+    </div>`;
+  }).join("") + (total > list.length ? '<button type="button" class="wl-more" id="wlMoreBtn">Mostrar más (' + (total - list.length) + ')</button>' : "");
+  const moreBtn = el("wlMoreBtn");
+  if(moreBtn) moreBtn.addEventListener("click", ()=>{ wlLimit += 60; renderWalletsChips(); });
+  wrap.querySelectorAll(".wc-star").forEach(btn=>{
+    btn.addEventListener("click", (e)=>{ e.stopPropagation(); toggleFavWallet(btn.getAttribute("data-addr")); });
+  });
+  wrap.querySelectorAll(".wc-x").forEach(btn=>{
+    btn.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      const addr = btn.getAttribute("data-addr");
+      const w = state.wallets.find(w=>w.address===addr);
+      const label = w ? walletLabel(w) : shortAddr(addr);
+      if(confirm(`¿Eliminar la wallet "${label}" de tu monitoreo? Se dejarán de rastrear sus posiciones.`)){
+        removeWalletEntry(addr);
+      }
+    });
+  });
+  wrap.querySelectorAll(".wc-edit").forEach(btn=>{
+    btn.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      const addr = btn.getAttribute("data-addr");
+      const w = state.wallets.find(w=>w.address===addr);
+      const next = prompt("Nombre para esta wallet:", w && w.name ? w.name : "");
+      if(next !== null) renameWalletEntry(addr, next);
+    });
+  });
+  wrap.querySelectorAll(".wallet-chip").forEach(chip=>{
+    chip.addEventListener("click", ()=> openWalletDetail(chip.getAttribute("data-addr")));
+  });
+}
+
+function populateWalletAssetFilter(){
+  const sel = el("walletAssetFilter");
+  const coins = Array.from(new Set(state.walletPositions.map(p=>p.coin))).sort();
+  const current = state.walletAssetFilter;
+  sel.innerHTML = '<option value="">Todos los activos</option>' +
+    coins.map(c => `<option value="${c}"${c===current?" selected":""}>${c}</option>`).join("");
+  if(!coins.includes(current)) state.walletAssetFilter = "";
+}
+
+function renderWalletsTable(){
+  const body = el("walletsTableBody");
+  let rows = state.walletPositions.slice();
+  if(state.walletAssetFilter) rows = rows.filter(p => p.coin === state.walletAssetFilter);
+  const q = (state.walletSearch || "").trim().toLowerCase();
+  if(q) rows = rows.filter(p => (p.name||"").toLowerCase().includes(q) || (p.coin||"").toLowerCase().includes(q) || (p.address||"").toLowerCase().includes(q));
+  const distOf = (p)=>{ const m = getMarkPrice(p.coin, exOfKey(p.address)); return (p.liqPx && m) ? Math.abs(m - p.liqPx)/m*100 : Infinity; };
+  const mode = state.walletSort || "balance";
+  rows.sort((a,b)=>{
+    if(mode === "notional") return b.notional - a.notional;
+    if(mode === "pnl") return (b.pnl||0) - (a.pnl||0);
+    if(mode === "risk") return distOf(a) - distOf(b);
+    if(mode === "name") return (a.name||"").localeCompare(b.name||"") || b.notional - a.notional;
+    const ba = a.accountBalance == null ? -Infinity : a.accountBalance;
+    const bb = b.accountBalance == null ? -Infinity : b.accountBalance;
+    if(bb !== ba) return bb - ba;
+    if(a.address !== b.address) return a.address < b.address ? -1 : 1;
+    return b.notional - a.notional;
+  });
+  renderWalletsSummary(rows, distOf);
+  if(!rows.length){
+    body.innerHTML = `<tr><td colspan="10" class="wallets-empty">${
+      state.wallets.length ? "No hay posiciones abiertas para este filtro." : "Sin wallets monitoreadas todavía."
+    }</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map(p=>{
+    const pnlClass = p.pnl > 0 ? "wt-pos" : (p.pnl < 0 ? "wt-neg" : "");
+    const levTxt = p.leverage ? p.leverage + "×" + (p.leverageType==="cross"?" C":p.leverageType==="isolated"?" I":"") : "—";
+    const levColor = leverageColor(p.leverage);
+    const mark = getMarkPrice(p.coin, exOfKey(p.address));
+    const distPct = (p.liqPx && mark) ? Math.abs(mark - p.liqPx) / mark * 100 : null;
+    const liqColor = p.liqPx ? liqRiskColor(distPct) : "#4C625D";
+    const staleCls = p.stale ? " wt-stale" : "";
+    const staleTitle = p.stale ? ' title="Conexión lenta: mostrando el último dato conocido de esta wallet"' : "";
+    return `<tr class="${staleCls} clickable" data-addr="${esc(p.address)}" data-coin="${esc(p.coin)}"${staleTitle}>
+      <td>${esc(p.name)}${exTag(p.address)}${p.stale ? ' <span class="wt-stale-dot">●</span>' : ""}</td>
+      <td class="wt-mono">${coinIconHtml(p.coin, 16)}${esc(p.coin)}</td>
+      <td><span class="side-badge ${p.side}">${p.side==="long"?"LONG":"SHORT"}</span><span class="wt-lev" style="background:${levColor}22;color:${levColor}">${levTxt}</span></td>
+      <td class="wt-mono">${fmtPrice(p.entryPx)}</td>
+      <td class="wt-mono">${fmtUsd(p.notional)}</td>
+      <td class="wt-mono ${pnlClass}">${p.pnl>0?"+":""}${fmtUsd(p.pnl)}</td>
+      <td class="wt-mono">${p.accountBalance != null ? fmtUsd(p.accountBalance) : "—"}</td>
+      <td class="wt-mono"><span class="liq-risk" style="background:${liqColor}22;color:${liqColor}">${p.liqPx ? fmtPrice(p.liqPx) : "—"}</span>${distPct != null ? '<div class="dist">a '+distPct.toFixed(1)+'%</div>' : ""}</td>
+      <td class="wt-mono">${openCell(p)}</td>
+      <td class="wt-mono">${act24Cell(p)}</td>
+    </tr>`;
+  }).join("");
+}
+
+/* ---- detalle de wallet ---- */
+let wmCurrentAddress = null;
+let wmFocus = null;
+const numFmt = (v, d) => v == null || isNaN(v) ? "—" : Number(v).toLocaleString(undefined, {maximumFractionDigits: d == null ? 4 : d});
+const sgn = (v) => (v > 0 ? "+" : "");
+function renderWalletModalSummary(w){
+  const ps = state.walletPositions.filter(p => p.address === w.address);
+  const bal = w.accountBalance;
+  let lg = 0, sh = 0, pnl = 0, risk = 0;
+  ps.forEach(p=>{
+    if(p.side === "long") lg += p.notional; else sh += p.notional;
+    pnl += p.pnl || 0;
+    const m = getMarkPrice(p.coin, exOfKey(p.address));
+    if(p.liqPx && m && Math.abs(m - p.liqPx)/m*100 < RISK_ENTER) risk++;
+  });
+  const expo = lg + sh, acc = w.account || {};
+  const st = stats24(w.address, null);
+  const it = (l, v, cls, sub)=> `<div class="wm-stat"><span class="lbl">${l}</span><span class="val ${cls||""}">${v}</span>${sub ? `<span class="lbl">${sub}</span>` : ""}</div>`;
+  el("wmSummary").innerHTML = [
+    it("Balance", bal != null ? fmtUsd(bal) : "—"),
+    it("PnL no realizado", w.totalPnl != null ? sgn(pnl) + fmtUsd(pnl) : "—", pnl > 0 ? "wt-pos" : pnl < 0 ? "wt-neg" : "", bal > 0 ? sgn(pnl) + (pnl/bal*100).toFixed(2) + "% del balance" : ""),
+    it("Exposición", fmtUsd(expo), "", bal > 0 ? (expo/bal).toFixed(2) + "× la cuenta" : ""),
+    it("Long / Short", fmtUsd(lg) + " / " + fmtUsd(sh)),
+    it("Margen usado", acc.marginUsed != null ? fmtUsd(acc.marginUsed) : "—"),
+    it("Disponible", acc.withdrawable != null ? fmtUsd(acc.withdrawable) : "—"),
+    it("Posiciones", ps.length, "", risk ? risk + " en riesgo" : "ninguna en riesgo"),
+    it("Operaciones 24 h", (act24[w.address] && act24[w.address].na) ? "n/d" : st ? st.ops : "…", "", st && st.ops ? "vol. " + fmtUsd(st.added + st.reduced) : ""),
+    it("Actualizada", w.lastOk ? new Date(w.lastOk).toLocaleTimeString() : "—", w.error ? "wt-neg" : "", w.error ? "sin respuesta" : "")
+  ].join("");
+}
+function renderWalletModalPositions(address){
+  const ps = state.walletPositions.filter(p => p.address === address).sort((a,b)=> b.notional - a.notional);
+  const box = el("wmPositions");
+  if(!ps.length){ box.innerHTML = '<div class="wallets-empty-hint">Sin posiciones abiertas.</div>'; }
+  else box.innerHTML = ps.map(p=>{
+    const mark = getMarkPrice(p.coin, exOfKey(p.address));
+    const dist = (p.liqPx && mark) ? Math.abs(mark - p.liqPx)/mark*100 : null;
+    const lc = p.liqPx ? liqRiskColor(dist) : "#4C625D";
+    const oi = openInfo(p), st = stats24(address, p.coin);
+    const pnlCls = p.pnl > 0 ? "wt-pos" : p.pnl < 0 ? "wt-neg" : "";
+    const f = (l, v, cls, sub)=> `<div class="f"><div class="lbl">${l}</div><div class="v ${cls||""}">${v}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
+    const lev = p.leverage ? p.leverage + "×" + (p.leverageType === "cross" ? " cruzada" : p.leverageType === "isolated" ? " aislada" : "") : "—";
+    return `<div class="wm-card" data-coin="${esc(p.coin)}">
+      <div class="wm-card-head"><span class="side-badge ${p.side}">${p.side === "long" ? "LONG" : "SHORT"}</span><span class="wt-mono">${coinIconHtml(p.coin, 16)}${esc(p.coin)}</span><span class="wt-mono" style="color:${leverageColor(p.leverage)}">${lev}</span>${oi && oi.fresh ? '<span class="tag">NUEVA 24 h</span>' : ""}${p.stale ? '<span class="tag red">dato desactualizado</span>' : ""}</div>
+      <div class="wm-fields">
+        ${f("Inicio de la posición", oi ? (oi.approx ? "~ " : oi.bound ? "antes de " : "") + oi.date : "calculando…", "", oi && oi.bound ? "no alcanza el historial" : "")}
+        ${f("Tiempo abierta", oi ? (oi.bound ? "≥ " : oi.approx ? "~ " : "") + oi.elapsed : "…")}
+        ${f("Tamaño", numFmt(p.size) + " " + esc(p.coin))}
+        ${f("Nocional", fmtUsd(p.notional), "", p.accountBalance > 0 ? (p.notional/p.accountBalance*100).toFixed(0) + "% de la cuenta" : "")}
+        ${f("Entrada", fmtPrice(p.entryPx))}
+        ${f("Precio actual", mark ? fmtPrice(mark) : "—", "", p.entryPx && mark ? sgn(mark - p.entryPx) + ((mark/p.entryPx - 1)*100).toFixed(2) + "% vs entrada" : "")}
+        ${f("PnL", p.pnl != null ? sgn(p.pnl) + fmtUsd(p.pnl) : "—", pnlCls, p.roe != null ? "ROE " + sgn(p.roe) + p.roe.toFixed(1) + "%" : "")}
+        ${f("Margen", p.marginUsed != null ? fmtUsd(p.marginUsed) : "—")}
+        <div class="f"><div class="lbl">Liquidación</div><div class="v"><span class="liq-risk" style="background:${lc}22;color:${lc}">${p.liqPx ? fmtPrice(p.liqPx) : "—"}</span></div>${dist != null ? `<div class="sub">a ${dist.toFixed(1)}% del precio</div>` : ""}</div>
+        ${f("Funding acumulado", p.funding != null ? sgn(p.funding) + fmtUsd(p.funding) : "—", p.funding > 0 ? "wt-pos" : p.funding < 0 ? "wt-neg" : "")}
+      </div>
+      <div class="wm-line">${st && st.ops ? "Últimas 24 h: <b>" + st.ops + " operación" + (st.ops === 1 ? "" : "es") + "</b> · añadió " + fmtUsd(st.added) + " · redujo " + fmtUsd(st.reduced) + (st.pnl ? " · PnL realizado " + sgn(st.pnl) + fmtUsd(st.pnl) : "") + " · última " + fmtElapsed(Date.now() - st.last) + " atrás" : st ? "Sin operaciones en las últimas 24 h." : "Calculando operaciones de las últimas 24 h…"}</div>
+    </div>`;
+  }).join("");
+  renderWalletModalActivity(address);
+}
+function renderWalletModalActivity(address){
+  const a = act24[address], box = el("wmActivity");
+  if(!a){ box.innerHTML = '<div class="wallets-empty-hint">Calculando…</div>'; }
+  else if(a.na){ box.innerHTML = '<div class="wallets-empty-hint">Lighter no entrega el historial de operaciones de esta wallet sin autenticación: la actividad de 24 h no está disponible.</div>'; }
+  else {
+    const coins = Array.from(new Set(a.list.filter(f => f.time >= Date.now() - DAY).map(f => f.coin)));
+    const rows = coins.map(c => ({ c, st: stats24(address, c) })).sort((x,y)=> y.st.last - x.st.last);
+    box.innerHTML = rows.length ? rows.map(({c, st})=>{
+      const open = state.walletPositions.some(p => p.address === address && p.coin === c);
+      return `<div class="wm-card" data-coin="${esc(c)}"><div class="wm-card-head"><span class="wt-mono">${esc(c)}</span><span class="tag${open ? "" : " red"}">${open ? "abierta" : "cerrada / sin posición"}</span></div>
+        <div class="wm-fields">
+          <div class="f"><div class="lbl">Operaciones</div><div class="v">${st.ops}</div></div>
+          <div class="f"><div class="lbl">Añadió</div><div class="v">${fmtUsd(st.added)}</div></div>
+          <div class="f"><div class="lbl">Redujo / cerró</div><div class="v">${fmtUsd(st.reduced)}</div></div>
+          <div class="f"><div class="lbl">PnL realizado</div><div class="v ${st.pnl > 0 ? "wt-pos" : st.pnl < 0 ? "wt-neg" : ""}">${sgn(st.pnl)}${fmtUsd(st.pnl)}</div></div>
+          <div class="f"><div class="lbl">Última operación</div><div class="v">hace ${fmtElapsed(Date.now() - st.last)}</div><div class="sub">${fmtDT(st.last)}</div></div>
+        </div></div>`;
+    }).join("") : '<div class="wallets-empty-hint">Sin operaciones en las últimas 24 h.</div>';
+  }
+  const evs = state.walletLiqEvents.filter(e => e.address === address).sort((x,y)=> y.time - x.time).slice(0,5);
+  el("wmLiqTitle").style.display = evs.length ? "" : "none";
+  el("wmLiqs").innerHTML = evs.map(ev => liqCardHtml(ev)).join("");
+}
+function liqCardHtml(ev){
+  const f = (l, v, sub)=> `<div class="f"><div class="lbl">${l}</div><div class="v">${v}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
+  return `<div class="wm-card wm-liq" data-t="${ev.time}" data-coin="${esc(ev.coin)}">
+    <div class="wm-card-head"><span>💥</span><span class="side-badge ${ev.side}">${ev.side === "long" ? "LONG" : "SHORT"}</span><span class="wt-mono">${esc(ev.coin)}</span><span class="tag red">LIQUIDADA</span></div>
+    <div class="wm-fields">
+      ${f("Cuándo", fmtDT(ev.time*1000), "hace " + fmtElapsed(Date.now() - ev.time*1000))}
+      ${f("Tamaño liquidado", ev.notional != null ? fmtUsd(ev.notional) : "—", ev.pctOfAccount != null ? ev.pctOfAccount.toFixed(1) + "% de la cuenta" : "")}
+      ${f("Entrada → liquidación", (ev.entryPx ? fmtPrice(ev.entryPx) : "—") + " → " + fmtPrice(ev.price))}
+      ${f("Apalancamiento", ev.leverage ? ev.leverage + "× " + (ev.leverageType === "cross" ? "cruzada" : ev.leverageType === "isolated" ? "aislada" : "") : "—")}
+      ${f("Duración", ev.openTime ? fmtElapsed(ev.time*1000 - ev.openTime) : "—", ev.openTime ? "desde " + fmtDT(ev.openTime) : "")}
+      ${f("Balance antes", ev.accountBalance != null ? fmtUsd(ev.accountBalance) : "—", ev.pnl != null ? "PnL previo " + sgn(ev.pnl) + fmtUsd(ev.pnl) : "")}
+    </div></div>`;
+}
+function openWalletDetail(address, opts){
+  const w = state.wallets.find(w => w.address === address);
+  if(!w) return;
+  wmCurrentAddress = address;
+  wmFocus = opts || null;
+  el("wmTitle").textContent = walletLabel(w) + (isLtKey(w.address) ? " · Lighter" : " · Hyperliquid");
+  el("wmAddr").innerHTML = exTag(w.address) + " " + esc(isLtKey(w.address) ? "Lighter" : "Hyperliquid") + " · " + esc(realAddr(w.address));
+  el("wmExplorer").href = isLtKey(w.address)
+    ? "https://app.lighter.xyz/explorer/accounts/" + ((w.ltIdxs && w.ltIdxs.length) ? w.ltIdxs[0] : realAddr(w.address))
+    : "https://app.hyperliquid.xyz/explorer/" + w.address;
+  renderWalletModalSummary(w);
+  renderWalletModalPositions(address);
+  syncWmFav();
+  el("walletModalBackdrop").style.display = "flex";
+  el("wmBody").scrollTop = 0;
+  const a = act24[address];
+  if(!a || Date.now() - a.ts > ACT_TTL) queueFills(address, true);
+  setTimeout(focusWalletModal, 80);
+}
+function focusWalletModal(){
+  const f = wmFocus; if(!f) return;
+  wmFocus = null;
+  const find = (sel, attr, val)=> Array.from(document.querySelectorAll(sel)).find(n => n.getAttribute(attr) === String(val));
+  let node = null;
+  if(f.liqTime) node = find("#wmLiqs [data-t]", "data-t", f.liqTime);
+  if(!node && f.coin) node = find("#wmPositions [data-coin]", "data-coin", f.coin);
+  if(!node && f.coin) node = find("#wmLiqs [data-coin]", "data-coin", f.coin) || find("#wmActivity [data-coin]", "data-coin", f.coin);
+  if(node){ node.scrollIntoView({block:"center", behavior:"smooth"}); node.classList.add("flash"); }
+}
+function closeWalletDetail(){
+  el("walletModalBackdrop").style.display = "none";
+  wmCurrentAddress = null;
+}
+el("wmCloseBtn").addEventListener("click", closeWalletDetail);
+el("walletModalBackdrop").addEventListener("click", (e)=>{
+  if(e.target.id === "walletModalBackdrop") closeWalletDetail();
+});
+
+/* ---- sub-páginas ---- */
+function switchWalletSubpage(name){
+  el("wsubManageBtn").classList.toggle("active", name === "manage");
+  el("wsubPositionsBtn").classList.toggle("active", name === "positions");
+  el("wsubLiquidatedBtn").classList.toggle("active", name === "liquidated");
+  el("wsubFavBtn").classList.toggle("active", name === "fav");
+  el("wsubPageFav").style.display = name === "fav" ? "flex" : "none";
+  if(name === "fav") favRender();
+  el("wsubPageManage").style.display = name === "manage" ? "flex" : "none";
+  el("wsubPagePositions").style.display = name === "positions" ? "flex" : "none";
+  el("wsubPageLiquidated").style.display = name === "liquidated" ? "flex" : "none";
+  if(name === "liquidated") renderWalletLiqHistory();
+}
+el("wsubManageBtn").addEventListener("click", ()=> switchWalletSubpage("manage"));
+el("wsubPositionsBtn").addEventListener("click", ()=> switchWalletSubpage("positions"));
+el("wsubLiquidatedBtn").addEventListener("click", ()=> switchWalletSubpage("liquidated"));
+el("wsubFavBtn").addEventListener("click", ()=> switchWalletSubpage("fav"));
+
+function renderWalletLiqHistory(){
+  const box = el("walletsLiqHistoryList");
+  const events = state.walletLiqEvents.slice().sort((a,b)=> b.time - a.time);
+  if(!events.length){
+    box.innerHTML = '<div class="wallets-empty-hint">Ninguna wallet monitoreada ha sido liquidada todavía.</div>';
+    return;
+  }
+  box.innerHTML = events.map(ev=>{
+    const d = new Date(ev.time * 1000);
+    const dateTxt = d.toLocaleDateString(undefined,{day:"2-digit",month:"short",year:"numeric"});
+    const timeTxt = d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"});
+    const levTxt = ev.leverage ? ev.leverage+"×" : "";
+    const marginTxt = ev.leverageType === "cross" ? "Cruzada" : (ev.leverageType === "isolated" ? "Aislada" : "—");
+    const notionalTxt = ev.notional != null ? fmtUsd(ev.notional) : "—";
+    const pctTxt = ev.pctOfAccount != null ? ev.pctOfAccount.toFixed(1)+"% de la cuenta" : null;
+    return `<div class="wlh-row" data-addr="${esc(ev.address)}" data-t="${ev.time}">
+      <span class="wlh-icon">☠</span>
+      <div class="wlh-body">
+        <div class="wlh-title">${esc(ev.name)} · ${esc(ev.coin)} ${ev.side==="long"?"LONG":"SHORT"} ${levTxt}</div>
+        <div class="wlh-sub">Liquidado ${notionalTxt}${pctTxt ? " · "+pctTxt : ""} · ${marginTxt}<br>${ev.entryPx ? "Entrada " + fmtPrice(ev.entryPx) + " → " : ""}Liquidación ${fmtPrice(ev.price)}${ev.openTime ? "<br>Abierta " + fmtDT(ev.openTime) + " · duró " + fmtElapsed(ev.time*1000 - ev.openTime) : ""}<br>Toca para ver la wallet ›</div>
+      </div>
+      <div class="wlh-time">${dateTxt}<br>${timeTxt}</div>
+    </div>`;
+  }).join("");
+}
+el("walletsLiqClearBtn").addEventListener("click", ()=>{
+  if(!state.walletLiqEvents.length) return;
+  if(confirm("¿Eliminar todo el historial de wallets liquidadas? Esta acción no se puede deshacer.")){
+    state.walletLiqEvents = [];
+    saveCachedWalletLiqEvents();
+    renderWalletLiqHistory();
+    if(chartPanelOpen) updateChartMarkers();
+  }
+});
+
+/* ---- formulario de añadir wallet / filtro de posiciones ---- */
+// Si el usuario pega una wallet junto con un nombre/apodo (por ejemplo copiado de un
+// leaderboard: "D7Top1 0x1633...4798" o "0x1633...4798 - D7Top1"), lo detectamos y
+// autocompletamos el campo de nombre — sigue siendo opcional, se puede editar o borrar.
+function parseWalletPaste(text){
+  const match = (text||"").match(/0x[0-9a-fA-F]{40}/);
+  if(!match) return null;
+  const address = match[0];
+  let rest = text.replace(address, "");
+  rest = rest.replace(/^[\s\-–—:|()·•,"']+|[\s\-–—:|()·•,"']+$/g, "").trim();
+  rest = rest.replace(/\s{2,}/g, " ");
+  return { address, name: rest || null };
+}
+el("walletAddrInput").addEventListener("paste", (e)=>{
+  const text = (e.clipboardData || window.clipboardData).getData("text");
+  const parsed = parseWalletPaste(text);
+  if(parsed && parsed.name){
+    e.preventDefault();
+    el("walletAddrInput").value = parsed.address;
+    const nameInput = el("walletNameInput");
+    if(!nameInput.value.trim()){
+      nameInput.value = parsed.name;
+      setWalletAddStatus(`Nombre detectado en lo pegado: "${parsed.name}" — puedes cambiarlo o dejarlo vacío.`, "ok");
+    }
+  }
+  // si no venía nombre junto a la dirección, se deja el pegado normal (solo la dirección)
+});
+el("walletExSelect").value = loadJson("wwLastEx_v1", "hl");
+el("walletExSelect").addEventListener("change", ()=> saveJson("wwLastEx_v1", el("walletExSelect").value));
+el("walletAddBtn").addEventListener("click", ()=>{
+  const addrInput = el("walletAddrInput");
+  const nameInput = el("walletNameInput");
+  if(addWalletEntry(addrInput.value, nameInput.value, el("walletExSelect").value)){
+    addrInput.value = "";
+    nameInput.value = "";
+  }
+});
+el("walletAddrInput").addEventListener("keydown", (e)=>{ if(e.key === "Enter") el("walletAddBtn").click(); });
+el("walletNameInput").addEventListener("keydown", (e)=>{ if(e.key === "Enter") el("walletAddBtn").click(); });
+
+/* ============================= v9.6: ESCANEO / IMPORTACIÓN DE WALLETS ============================= */
+const SCAN_REG_KEY = "wwScanRegistry_v1", SCAN_AUTO_KEY = "wwScanAuto_v1";
+let scanReg = loadJson(SCAN_REG_KEY, {});      // clave de wallet -> {t, st, src}: lo que ya se escaneó (no se repite)
+let scanLastClip = "";
+function saveScanReg(){ saveJson(SCAN_REG_KEY, scanReg); el("scanRegCount").textContent = Object.keys(scanReg).length; }
+// Extrae todas las direcciones 0x del texto y deduce la fuente (litscan / hypurrscan) por el enlace que las precede.
+function scanExtract(text){
+  text = String(text || "");
+  const out = [], seen = new Set(), re = /0x[a-fA-F0-9]{40}/g;
+  let m;
+  while((m = re.exec(text))){
+    const addr = m[0].toLowerCase();
+    if(seen.has(addr)) continue;
+    seen.add(addr);
+    const pre = text.slice(0, m.index);
+    const tok = (pre.match(/\S*$/) || [""])[0].toLowerCase();                                  // el propio enlace
+    const line = pre.slice(pre.lastIndexOf("\n") + 1).toLowerCase();                         // o su misma línea
+    const detect = (c) => { const li = c.lastIndexOf("litscan"), hi = Math.max(c.lastIndexOf("hypurrscan"), c.lastIndexOf("hypurscan")); return li < 0 && hi < 0 ? "" : (li > hi ? "litscan" : "hypurrscan"); };
+    out.push({ addr, raw: m[0], src: detect(tok) || detect(line) });
+  }
+  return out;
+}
+function scanProcess(cands, mode){
+  const res = { added: [], dup: [], skip: 0 };
+  let changed = false;
+  cands.forEach(c=>{
+    const ex = mode === "auto" ? (c.src === "litscan" ? "lt" : (c.src === "hypurrscan" ? "hl" : el("walletExSelect").value)) : mode;
+    (ex === "both" ? ["hl","lt"] : [ex === "lt" ? "lt" : "hl"]).forEach(e=>{
+      const key = e === "lt" ? "lt:" + c.addr : c.addr;
+      const tag = c.src || "manual";
+      const cur = state.wallets.find(w => w.address === key);
+      if(scanReg[key]){ res.skip++; return; }                 // ya escaneada antes: no se vuelve a procesar
+      if(cur){                                                // ya estaba añadida: se rechaza y se etiqueta
+        if(!cur.scanTag) cur.scanTag = "ya añadida";
+        scanReg[key] = { t: nowSec(), st: "dup", src: tag };
+        res.dup.push(key); changed = true; return;
+      }
+      const w = { address: key, name: nextWalletNumber(), scanTag: tag };
+      if(e === "lt" && c.raw !== c.addr) w.raw = c.raw;
+      state.wallets.push(w);
+      scanReg[key] = { t: nowSec(), st: "added", src: tag };
+      res.added.push(key); changed = true;
+    });
+  });
+  if(changed){
+    saveWallets(); saveScanReg(); renderWalletsChips();
+    if(res.added.length) refreshAllWallets();
+  }
+  return res;
+}
+function scanRender(res){
+  const lab = (k) => (isLtKey(k) ? "LT " : "HL ") + shortAddr(k);
+  const rows = [];
+  res.added.forEach(k => rows.push('<div class="ok">✅ Añadida · ' + esc(lab(k)) + '</div>'));
+  res.dup.forEach(k => rows.push('<div class="dup">🏷 Ya añadida (rechazada y etiquetada) · ' + esc(lab(k)) + '</div>'));
+  if(res.skip) rows.push('<div class="skip">⏭ ' + res.skip + ' ya escaneada(s) antes — omitida(s)</div>');
+  if(!rows.length) rows.push('<div class="skip">No se encontraron direcciones 0x en el texto.</div>');
+  el("scanResults").innerHTML = rows.join("");
+}
+function scanRun(text, mode, silent){
+  const cands = scanExtract(text);
+  if(!cands.length){ if(!silent) scanRender({added:[],dup:[],skip:0}); return null; }
+  const res = scanProcess(cands, mode);
+  if(!silent || res.added.length || res.dup.length){ el("scanPanel").classList.add("open"); scanRender(res); }
+  if(res.added.length) setWalletAddStatus(res.added.length + " wallet(s) añadida(s) desde el escaneo. Cargando posiciones…", "ok");
+  return res;
+}
+el("scanRegCount").textContent = Object.keys(scanReg).length;
+el("scanToggleBtn").addEventListener("click", ()=> el("scanPanel").classList.toggle("open"));
+el("scanRunBtn").addEventListener("click", ()=>{
+  const r = scanRun(el("scanText").value, el("scanExSelect").value, false);
+  if(r) el("scanText").value = "";
+});
+el("scanPasteBtn").addEventListener("click", async ()=>{
+  try{ el("scanText").value = await navigator.clipboard.readText(); }
+  catch(e){ el("scanResults").innerHTML = '<div class="skip">No se pudo leer el portapapeles: pega el texto manualmente en el cuadro.</div>'; }
+});
+el("scanClearRegBtn").addEventListener("click", ()=>{
+  if(confirm("¿Limpiar el registro de escaneos? Las wallets ya añadidas siguen monitoreadas, pero podrán volver a escanearse.")){
+    scanReg = {}; saveScanReg(); el("scanResults").innerHTML = "";
+  }
+});
+el("scanAutoChk").checked = !!loadJson(SCAN_AUTO_KEY, false);
+el("scanAutoChk").addEventListener("change", ()=>{ saveJson(SCAN_AUTO_KEY, el("scanAutoChk").checked); if(el("scanAutoChk").checked) scanCheckClipboard(); });
+// Detección automática: al volver a la app se lee el portapapeles (el navegador puede pedir permiso).
+async function scanCheckClipboard(){
+  if(!el("scanAutoChk").checked || !navigator.clipboard || !navigator.clipboard.readText) return;
+  try{
+    const txt = await navigator.clipboard.readText();
+    if(!txt || txt === scanLastClip) return;
+    scanLastClip = txt;
+    scanRun(txt, el("scanExSelect").value, true);
+  }catch(e){}
+}
+document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState === "visible") scanCheckClipboard(); });
+window.addEventListener("focus", scanCheckClipboard);
+el("walletAssetFilter").addEventListener("change", (e)=>{
+  state.walletAssetFilter = e.target.value;
+  renderWalletsTable();
+});
+el("walletRefreshBtn").addEventListener("click", ()=> refreshAllWallets());
+el("refreshAllBtn").addEventListener("click", ()=> refreshAllWallets());
+
+const autoToggleEl = el("autoToggle");
+autoToggleEl.classList.toggle("on", state.autoRefresh);
+autoToggleEl.addEventListener("click", ()=>{
+  state.autoRefresh = !state.autoRefresh;
+  autoToggleEl.classList.toggle("on", state.autoRefresh);
+  saveSettings();
+  if(state.autoRefresh) startWalletLoop(); else stopWalletLoop();
+});
+
+let walletPollTimer = null;
+function scheduleNextWalletPoll(delay){
+  clearTimeout(walletPollTimer);
+  if(!state.autoRefresh) return;
+  walletPollTimer = setTimeout(async ()=>{
+    if(!document.hidden) await refreshAllWallets();
+    scheduleNextWalletPoll(WALLET_POLL_MS);
+  }, delay);
+}
+function startWalletLoop(){
+  clearTimeout(walletPollTimer);
+  refreshAllWallets().finally(()=> scheduleNextWalletPoll(WALLET_POLL_MS));
+}
+function stopWalletLoop(){
+  clearTimeout(walletPollTimer);
+  walletPollTimer = null;
+}
+// Al volver a la app o recuperar conexión, actualiza de inmediato si los datos están viejos.
+function refreshIfStale(){
+  if(document.hidden || refreshPromise) return;
+  if(Date.now() - lastRefreshOk > WALLET_POLL_MS / 2){
+    refreshAllWallets().finally(()=>{ if(state.autoRefresh) scheduleNextWalletPoll(WALLET_POLL_MS); });
+  }
+}
+document.addEventListener("visibilitychange", refreshIfStale);
+window.addEventListener("online", refreshIfStale);
+window.addEventListener("focus", refreshIfStale);
+
+renderWalletsChips();
+renderWalletsTable();
+populateWalletAssetFilter();
+renderWalletLiqHistory();
+setTopbarStatus();
+
+/* ============================= PANEL DE GRÁFICO (bajo demanda) ============================= */
+const miniChart = LightweightCharts.createChart(el("miniChart"), {
+  layout:{ background:{color:"transparent"}, textColor:"#8aa39c", fontFamily:"Inter, sans-serif", fontSize:11 },
+  grid:{ vertLines:{color:"rgba(151,252,228,0.045)"}, horzLines:{color:"rgba(151,252,228,0.045)"} },
+  rightPriceScale:{ borderColor:"rgba(151,252,228,0.12)", scaleMargins:{top:0.08, bottom:0.26} },
+  timeScale:{ borderColor:"rgba(151,252,228,0.12)", timeVisible:true, secondsVisible:false, rightOffset:6, barSpacing:7 },
+  crosshair:{ mode:0 },
+  handleScroll:true, handleScale:true
+});
+const miniCandleSeries = miniChart.addCandlestickSeries({
+  upColor:"#5FE3B8", downColor:"#FF6B6B", wickUpColor:"#5FE3B8", wickDownColor:"#FF6B6B",
+  borderVisible:false, priceFormat:{ type:"custom", formatter: fmtPrice, minMove: 0.00000001 }
+});
+const miniVolumeSeries = miniChart.addHistogramSeries({
+  priceScaleId:"vol", priceFormat:{type:"volume"}, color:"#3a5750"
+});
+miniChart.priceScale("vol").applyOptions({ scaleMargins:{ top:0.82, bottom:0 } });
+
+const chartLiqCanvas = el("chartLiqCanvas");
+const chartLiqCtx = chartLiqCanvas.getContext("2d");
+function resizeChartLiqCanvas(){
+  const rect = el("chartBodyWrap").getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  chartLiqCanvas.width = Math.max(1, Math.round(rect.width*dpr));
+  chartLiqCanvas.height = Math.max(1, Math.round(rect.height*dpr));
+  chartLiqCanvas.style.width = rect.width+"px";
+  chartLiqCanvas.style.height = rect.height+"px";
+  chartLiqCtx.setTransform(dpr,0,0,dpr,0,0);
+}
+function roundRectPath(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+// Agrupa las posiciones abiertas de este activo en franjas delgadas de PÍXELES
+// (no de precio) y suma su notional en cada una: así cada barra es finita y fija
+// en alto (unos pocos píxeles), sin importar qué tan amplio sea el rango de precios
+// — permite ubicar con precisión dónde están las zonas más concentradas, igual que
+// el mapa de liquidaciones de hypurrscan.
+function computeLiquidationBuckets(coin, rect){
+  const positions = state.walletPositions.filter(p => p.coin === coin && p.liqPx && !liqCrossed(p));
+  if(!positions.length) return [];
+  const pxStep = 2; // grosor de cada barra en píxeles — más chico = más fino
+  const buckets = {};
+  positions.forEach(p=>{
+    const y = miniCandleSeries.priceToCoordinate(p.liqPx);
+    if(y == null || y < 0 || y > rect.height) return;
+    const idx = Math.floor(y / pxStep);
+    if(!buckets[idx]) buckets[idx] = { yTop: idx*pxStep, yBot: (idx+1)*pxStep, notional: 0 };
+    buckets[idx].notional += p.notional;
+  });
+  return Object.values(buckets);
+}
+
+function renderChartLiqOverlay(){
+  const rect = el("chartBodyWrap").getBoundingClientRect();
+  chartLiqCtx.clearRect(0, 0, rect.width, rect.height);
+  if(!state.chartCoin) return;
+  const relevant = state.walletPositions.filter(p => p.coin === state.chartCoin && p.liqPx && !liqCrossed(p));
+
+  // El contenedor completo (rect.width) incluye la escala de precio de la derecha
+  // (donde se ven 10.00, 8.00…), que NO es parte del área de velas. Hay que restar
+  // su ancho para saber dónde está el límite real del panel de precios.
+  let priceScaleW = 0;
+  try{ priceScaleW = miniChart.priceScale("right").width() || 0; }catch(e){}
+  const paneRight = Math.max(0, rect.width - priceScaleW);
+
+  // Las líneas/bandas ya no se estiran hasta el borde del lienzo (que incluye ese
+  // hueco vacío después de la última vela): se detienen justo en el precio actual.
+  const xRawNow = state.chartLastTime != null ? miniChart.timeScale().timeToCoordinate(state.chartLastTime) : null;
+  const xNow = xRawNow == null ? paneRight : Math.max(0, Math.min(paneRight, xRawNow));
+
+  // ---- Doble referencia: bandas sombreadas en la ubicación REAL del precio ----
+  // No usan el ajuste anti-solape de las etiquetas de abajo, así siempre muestran
+  // dónde está el nivel de liquidación de verdad, aunque su etiqueta se haya movido
+  // para no chocar con otras. Las ya liquidadas quedan tenues y solo se dibujan
+  // hasta el instante en que se liquidaron (no siguen "vivas" después de eso).
+  const bandHalfH = 0.5;   // franja de 1 px: cada nivel se distingue y no tapa el gráfico
+  const barSecLiq = (INTERVAL_MS[state.chartInterval] || 60000) / 1000;
+  // Una liquidación activa se dibuja desde la última vela que tocó ese precio hasta
+  // el precio actual: si una vela pasada ya cruzó el nivel, la línea se corta ahí
+  // (como en los mapas de calor de liquidaciones) y no atraviesa todo el gráfico.
+  const liqStartX = (px, untilTime)=>{
+    if(state.chartCandlesCoin !== state.chartCoin || !state.chartCandles) return 0;
+    const cs = state.chartCandles;
+    for(let i = cs.length - 1; i >= 0; i--){
+      if(untilTime != null && cs[i].time > untilTime) continue;   // solo velas anteriores a la liquidación
+      if(cs[i].low <= px && px <= cs[i].high){
+        const x = miniChart.timeScale().timeToCoordinate(cs[i].time);
+        return x == null ? 0 : Math.max(0, Math.min(xNow, x));
+      }
+    }
+    return 0;
+  };
+  chartLiqCtx.save();
+  state.walletLiqEvents.filter(ev => ev.coin === state.chartCoin).forEach(ev=>{
+    const y = miniCandleSeries.priceToCoordinate(ev.price);
+    if(y == null || y < -bandHalfH || y > rect.height + bandHalfH) return;
+    // La hora del evento rara vez coincide con el inicio de una vela: se ajusta a su vela
+    // (si no, el cálculo fallaba y la franja se estiraba hasta el final del gráfico).
+    const snapT = Math.floor(ev.time / barSecLiq) * barSecLiq;
+    const firstT = state.chartCandles && state.chartCandles.length ? state.chartCandles[0].time : null;
+    if(firstT != null && snapT < firstT) return;
+    let xEnd = state.chartLastTime != null && snapT >= state.chartLastTime ? xNow : null;
+    if(xEnd == null){
+      const xRaw = miniChart.timeScale().timeToCoordinate(snapT);
+      xEnd = xRaw == null ? 0 : Math.max(0, Math.min(xNow, xRaw));   // si no se puede ubicar, no se dibuja
+    }
+    if(xEnd <= 0) return;
+    const xs = Math.min(liqStartX(ev.price, snapT), xEnd);
+    chartLiqCtx.fillStyle = leverageColor(ev.leverage) + "26"; // tenue: ya liquidada
+    chartLiqCtx.fillRect(xs, y - bandHalfH, xEnd - xs, bandHalfH*2);
+  });
+  relevant.forEach(p=>{
+    const y = miniCandleSeries.priceToCoordinate(p.liqPx);
+    if(y == null || y < -bandHalfH || y > rect.height + bandHalfH) return;
+    chartLiqCtx.fillStyle = leverageColor(p.leverage) + "78"; // fuerte: posición abierta hoy
+    const x0 = liqStartX(p.liqPx);
+    if(xNow - x0 > 0) chartLiqCtx.fillRect(x0, y - bandHalfH, xNow - x0, bandHalfH*2);
+  });
+  chartLiqCtx.restore();
+
+  // ---- Mapa de liquidaciones (barras horizontales, estilo hypurrscan) ----
+  // Franja de ancho fijo pegada al límite interno del panel de precios (paneRight),
+  // creciendo hacia la izquierda — nunca invade el área de las velas ni se mete
+  // debajo de la escala de precio, igual que en hypurrscan. Rojo = por encima del
+  // precio actual (shorts), verde = por debajo (longs).
+  const heatmapW = Math.min(90, paneRight * 0.22);
+  const heatmapLeft = Math.max(xNow, paneRight - heatmapW);
+  const availW = paneRight - heatmapLeft;
+  const buckets = computeLiquidationBuckets(state.chartCoin, rect);
+  if(buckets.length && availW > 4){
+    const maxNotional = Math.max(...buckets.map(b=>b.notional));
+    const markNow = getMarkPrice(state.chartCoin);
+    chartLiqCtx.save();
+    buckets.forEach(b=>{
+      const y0 = b.yTop, y1 = b.yBot;
+      if(y1 < 0 || y0 > rect.height) return;
+      const midPrice = miniCandleSeries.coordinateToPrice((y0+y1)/2);
+      const isAbove = (markNow != null && midPrice != null) ? midPrice >= markNow : true;
+      const color = isAbove ? "#FF6B6B" : "#5FE3B8";
+      const frac = maxNotional > 0 ? b.notional / maxNotional : 0;
+      const barW = Math.max(2, frac * availW);
+      chartLiqCtx.fillStyle = color + "D0";
+      chartLiqCtx.fillRect(paneRight - barW, y0, barW, Math.max(1, y1 - y0));
+    });
+    chartLiqCtx.restore();
+  }
+
+  if(!state.chartLiqLinesOn) return; // el botón 📏 solo oculta líneas+etiquetas, no las franjas
+  if(!relevant.length) return;
+  const items = relevant.map(p=>{
+    const y = miniCandleSeries.priceToCoordinate(p.liqPx);
+    return (y == null || y < 0 || y > rect.height) ? null : { p, y, color: leverageColor(p.leverage), x0: liqStartX(p.liqPx) };
+  }).filter(Boolean).sort((a,b)=> a.y - b.y);
+  if(!items.length) return;
+  const minGap = 15;
+  for(let i=1;i<items.length;i++){
+    if(items[i].y - items[i-1].y < minGap) items[i].y = items[i-1].y + minGap;
+  }
+  chartLiqCtx.save();
+  items.forEach(item=>{
+    const { p, y, color, x0 } = item;
+    chartLiqCtx.beginPath();
+    chartLiqCtx.setLineDash([3,4]);
+    chartLiqCtx.strokeStyle = color + "99";
+    chartLiqCtx.lineWidth = 1;
+    chartLiqCtx.moveTo(x0, y);
+    chartLiqCtx.lineTo(xNow, y);
+    chartLiqCtx.stroke();
+    chartLiqCtx.setLineDash([]);
+
+    const label = (p.leverage ? p.leverage+"× " : "") + p.name + " · " + fmtPrice(p.liqPx);
+    chartLiqCtx.font = "600 10px 'JetBrains Mono', monospace";
+    const textW = chartLiqCtx.measureText(label).width;
+    const padX = 6, boxH = 16;
+    chartLiqCtx.fillStyle = "rgba(9,20,18,0.94)";
+    chartLiqCtx.strokeStyle = color;
+    chartLiqCtx.lineWidth = 1;
+    const bx = Math.max(4, Math.min(x0 + 2, xNow - (textW + padX*2) - 2));
+    roundRectPath(chartLiqCtx, bx, y-boxH/2, textW+padX*2, boxH, 4);
+    chartLiqCtx.fill(); chartLiqCtx.stroke();
+    chartLiqCtx.fillStyle = color;
+    chartLiqCtx.textBaseline = "middle";
+    chartLiqCtx.textAlign = "left";
+    chartLiqCtx.fillText(label, bx+padX, y+0.5);
+  });
+  chartLiqCtx.restore();
+}
+miniChart.timeScale().subscribeVisibleLogicalRangeChange(()=> renderChartLiqOverlay());
+
+function updateChartMarkers(){
+  if(!state.chartCoin){ miniCandleSeries.setMarkers([]); return; }
+  const barSec = (INTERVAL_MS[state.chartInterval] || 60000) / 1000;
+  const seen = new Set();
+  const markers = [];
+  state.walletLiqEvents.filter(ev => ev.coin === state.chartCoin).forEach(ev=>{
+    const t = Math.floor(ev.time / barSec) * barSec;
+    const key = t + "|" + (ev.side === "long" ? "b" : "a");
+    if(seen.has(key)) return;
+    seen.add(key);
+    markers.push({
+      time: t,
+      position: ev.side === "long" ? "belowBar" : "aboveBar",
+      color: leverageColor(ev.leverage),
+      shape: "circle",
+      size: 0.55,
+      text: ""
+    });
+  });
+  markers.sort((a,b)=> a.time - b.time);
+  miniCandleSeries.setMarkers(markers);
+}
+
+new ResizeObserver(()=>{
+  const wrap = el("chartBodyWrap");
+  miniChart.resize(wrap.clientWidth, wrap.clientHeight);
+  resizeChartLiqCanvas();
+  renderChartLiqOverlay();
+}).observe(el("chartBodyWrap"));
+
+/* ---- selector de activo / temporalidad ---- */
+function populateChartAssetOptions(){
+  const sel = el("chartAssetSelect");
+  const coins = Array.from(new Set(state.walletPositions.map(p=>p.coin))).sort();
+  const prev = sel.value || state.chartCoin;
+  sel.innerHTML = coins.length
+    ? coins.map(c => `<option value="${c}">${c}</option>`).join("")
+    : '<option value="">Sin activos</option>';
+  if(coins.length){
+    const keep = coins.includes(prev) ? prev : coins[0];
+    sel.value = keep;
+    if(state.chartCoin !== keep){
+      state.chartCoin = keep;
+      if(chartPanelOpen){ loadChartData(); renderChartStats(); }
+    }
+  } else if(state.chartCoin !== null){
+    state.chartCoin = null;
+  }
+  el("chartEmpty").style.display = coins.length ? "none" : "flex";
+}
+el("chartAssetSelect").addEventListener("change", (e)=>{
+  state.chartCoin = e.target.value || null;
+  saveSettings();
+  renderChartStats();
+  if(state.chartCoin) loadChartData();
+});
+
+const tfRow = el("chartTfRow");
+tfRow.innerHTML = TIMEFRAMES.map(tf =>
+  `<button type="button" class="cm-tf-btn${tf.value===state.chartInterval?" active":""}" data-tf="${tf.value}">${tf.label}</button>`
+).join("");
+tfRow.querySelectorAll(".cm-tf-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    state.chartInterval = btn.getAttribute("data-tf");
+    tfRow.querySelectorAll(".cm-tf-btn").forEach(b=> b.classList.toggle("active", b===btn));
+    saveSettings();
+    if(state.chartCoin) loadChartData();
+  });
+});
+
+async function loadChartData(){
+  if(!state.chartCoin) return;
+  el("chartLoading").classList.add("show");
+  el("cmTitle").textContent = "Gráfico · " + state.chartCoin;
+  renderChartStats();
+  try{
+    const candles = await fetchCandles(state.chartCoin, state.chartInterval, CHART_CANDLE_COUNT, 20000);
+    miniCandleSeries.setData(candles.map(c=>({time:c.time, open:c.open, high:c.high, low:c.low, close:c.close})));
+    miniVolumeSeries.setData(candles.map(c=>({time:c.time, value:c.volume, color: c.close>=c.open ? "rgba(95,227,184,0.5)" : "rgba(255,107,107,0.5)"})));
+    state.chartLastTime = candles.length ? candles[candles.length-1].time : null;
+    if(candles.length){ const lc = candles[candles.length-1]; state.chartLive = { coin: state.chartCoin, interval: state.chartInterval, open: lc.open, close: lc.close }; }
+    state.chartCandles = candles.map(c=>({time:c.time, high:c.high, low:c.low})); state.chartCandlesCoin = state.chartCoin;
+    miniChart.timeScale().fitContent();
+    renderChartLiqOverlay();
+    updateChartMarkers();
+    renderChartStats();
+    el("chartNote").textContent = "Actualizado " + new Date().toLocaleTimeString() + " · se refresca cada pocos minutos (no en vivo).";
+    chartWsStart();
+  } catch(err){
+    console.warn("chart load failed", err);
+    el("chartNote").textContent = "No se pudo cargar el gráfico (conexión). Toca ⟳ para reintentar.";
+  } finally {
+    el("chartLoading").classList.remove("show");
+  }
+}
+/* ---- WebSocket de Hyperliquid: velas en vivo ---- */
+const HL_WS = "wss://api.hyperliquid.xyz/ws";
+let hlWsStatsAt = 0;
+let hlWs = null, hlWsKey = "", hlWsPing = null, hlWsRetry = 0, hlWsRetryTimer = null, hlWsOverlayTimer = null;
+function chartWsStop(){
+  clearInterval(hlWsPing); clearTimeout(hlWsRetryTimer); clearTimeout(hlWsOverlayTimer);
+  if(hlWs){ hlWs.onclose = null; hlWs.onerror = null; hlWs.onmessage = null; try{ hlWs.close(); }catch(e){} }
+  hlWs = null; hlWsKey = "";
+}
+function chartLiveNote(){ el("chartNote").textContent = "● En vivo · WebSocket de Hyperliquid · " + new Date().toLocaleTimeString(); }
+function chartWsStart(){
+  if(!chartPanelOpen || !state.chartCoin || typeof WebSocket === "undefined") return;
+  if(!state.universe.some(u => u.name === state.chartCoin)) return;      // solo activos de Hyperliquid
+  const coin = state.chartCoin, interval = state.chartInterval, key = coin + "|" + interval;
+  if(hlWs && hlWsKey === key && hlWs.readyState <= 1){ if(hlWs.readyState === 1) chartLiveNote(); return; }
+  chartWsStop();
+  let ws; try{ ws = new WebSocket(HL_WS); }catch(e){ return; }
+  hlWs = ws; hlWsKey = key;
+  ws.onopen = ()=>{
+    hlWsRetry = 0;
+    ws.send(JSON.stringify({ method: "subscribe", subscription: { type: "candle", coin, interval } }));
+    hlWsPing = setInterval(()=>{ try{ ws.send(JSON.stringify({ method: "ping" })); }catch(e){} }, 30000);
+    chartLiveNote();
+  };
+  ws.onmessage = (m)=>{
+    let d; try{ d = JSON.parse(m.data); }catch(e){ return; }
+    if(d.channel === "candle" && d.data) chartWsCandle(d.data, coin, interval);
+  };
+  const lost = ()=>{
+    clearInterval(hlWsPing);
+    if(hlWs !== ws) return;
+    hlWs = null;
+    if(!chartPanelOpen || state.chartCoin !== coin || state.chartInterval !== interval) return;
+    el("chartNote").textContent = "Reconectando WebSocket… (se actualiza cada pocos minutos mientras tanto)";
+    hlWsRetry++;
+    hlWsRetryTimer = setTimeout(chartWsStart, Math.min(30000, 1000 * Math.pow(2, hlWsRetry)));
+  };
+  ws.onclose = lost;
+  ws.onerror = ()=>{ try{ ws.close(); }catch(e){} };
+}
+function chartWsCandle(c, coin, interval){
+  if(c.s !== coin || c.i !== interval || state.chartCoin !== coin || state.chartInterval !== interval) return;
+  const time = Math.floor(c.t / 1000);
+  if(state.chartLastTime != null && time < state.chartLastTime) return;      // la serie no admite velas anteriores
+  const o = parseFloat(c.o), h = parseFloat(c.h), l = parseFloat(c.l), cl = parseFloat(c.c), v = parseFloat(c.v);
+  if(![o,h,l,cl].every(isFinite)) return;
+  miniCandleSeries.update({ time, open: o, high: h, low: l, close: cl });
+  miniVolumeSeries.update({ time, value: isFinite(v) ? v : 0, color: cl >= o ? "rgba(95,227,184,0.5)" : "rgba(255,107,107,0.5)" });
+  const cs = state.chartCandles;
+  if(cs && state.chartCandlesCoin === coin){
+    if(cs.length && cs[cs.length-1].time === time){ cs[cs.length-1].high = h; cs[cs.length-1].low = l; }
+    else cs.push({ time, high: h, low: l });
+  }
+  state.chartLastTime = time;
+  state.chartLive = { coin, interval, open: o, close: cl };
+  const now = Date.now();
+  if(now - hlWsStatsAt > 250){ hlWsStatsAt = now; renderChartStats(); }
+  if(!hlWsOverlayTimer) hlWsOverlayTimer = setTimeout(()=>{ hlWsOverlayTimer = null; if(chartPanelOpen){ renderChartLiqOverlay(); chartLiveNote(); } }, 1000);
+}
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState === "visible" && chartPanelOpen && state.chartCoin){ loadChartData(); }   // al volver, recarga y reconecta
+});
+
+/* ============================= v9.15: ICONOS + BUSCADOR DE ACTIVOS ============================= */
+// Iconos: los mismos que usa la web de Hyperliquid. Si no existe el icono (o no carga), queda la letra inicial.
+function coinIconHtml(coin, size){
+  const c = String(coin || "");
+  const letter = esc(c.replace(/^[^:]*:/, "").charAt(0).toUpperCase() || "?");
+  const url = "https://app.hyperliquid.xyz/coins/" + encodeURIComponent(c) + ".svg";
+  return '<span class="coin-ic" style="--s:' + (size || 18) + 'px"><span class="coin-fb">' + letter + '</span><img src="' + esc(url) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></span>';
+}
+const assetPicker = (function(){
+  const bd = document.createElement("div");
+  bd.className = "ap-backdrop";
+  bd.innerHTML = '<div class="ap-sheet"><div class="ap-head"><input type="search" placeholder="Buscar activo…" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Buscar activo"><button type="button" aria-label="Cerrar">✕</button></div><div class="ap-list"></div></div>';
+  document.body.appendChild(bd);
+  const input = bd.querySelector("input"), list = bd.querySelector(".ap-list");
+  let cur = null;
+  function close(){ bd.style.display = "none"; cur = null; input.blur(); }
+  function render(){
+    if(!cur) return;
+    const q = input.value.trim().toLowerCase();
+    const opts = Array.from(cur.options).filter(o => !q || o.textContent.toLowerCase().indexOf(q) >= 0);
+    const head = opts.filter(o => !o.value), fav = opts.filter(o => o.value && isFavAsset(o.value)), rest = opts.filter(o => o.value && !isFavAsset(o.value));
+    const row = (o) => '<div class="ap-item' + (o.value === cur.value ? " sel" : "") + '" data-v="' + esc(o.value) + '">' + (o.value ? coinIconHtml(o.value, 22) : "") + '<span class="ap-name">' + esc(o.textContent) + '</span>' +
+      (o.value ? '<span class="ap-star' + (isFavAsset(o.value) ? " on" : "") + '" data-star="' + esc(o.value) + '" title="Favorito">' + (isFavAsset(o.value) ? "★" : "☆") + '</span>' : "") + '</div>';
+    list.innerHTML = opts.length ? head.map(row).join("") + (fav.length ? '<div class="ap-sec">★ Favoritos</div>' + fav.map(row).join("") + (rest.length ? '<div class="ap-sec">Todos</div>' : "") : "") + rest.map(row).join("")
+      : '<div class="ap-empty">Sin resultados para «' + esc(input.value) + '»</div>';
+  }
+  input.addEventListener("input", render);
+  bd.querySelector("button").addEventListener("click", close);
+  bd.addEventListener("click", (e)=>{ if(e.target === bd) close(); });
+  list.addEventListener("click", (e)=>{
+    const st = e.target.closest("[data-star]");
+    if(st){ const sy = list.scrollTop; toggleFavAsset(st.getAttribute("data-star")); render(); list.scrollTop = sy; return; }
+    const it = e.target.closest(".ap-item"); if(!it || !cur) return;
+    const sel = cur, v = it.getAttribute("data-v");
+    close();
+    if(sel.value !== v){ sel.value = v; sel.dispatchEvent(new Event("change", { bubbles: true })); }
+  });
+  return { open(sel){ cur = sel; input.value = ""; bd.style.display = "flex"; render(); list.scrollTop = 0; setTimeout(()=>input.focus(), 50); } };
+})();
+// Convierte un <select> de activos en un botón con icono que abre el buscador (el select sigue existiendo, oculto).
+function enhanceAssetSelect(id){
+  const sel = el(id); if(!sel) return;
+  const btn = document.createElement("button");
+  btn.type = "button"; btn.className = "asset-picker-btn"; btn.style.flex = "1 1 150px";
+  sel.style.display = "none";
+  sel.parentNode.insertBefore(btn, sel);
+  function sync(){
+    const o = sel.options[sel.selectedIndex];
+    const txt = o ? o.textContent : "";
+    btn.innerHTML = '<span class="apb-label">' + (sel.value ? coinIconHtml(sel.value, 20) : "") + esc(txt || "Activo") + '</span><span class="apb-caret">▾</span>';
+  }
+  const desc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
+  Object.defineProperty(sel, "value", { get(){ return desc.get.call(sel); }, set(v){ desc.set.call(sel, v); sync(); }, configurable: true });
+  new MutationObserver(sync).observe(sel, { childList: true });
+  sel.addEventListener("change", sync);
+  btn.addEventListener("click", ()=> assetPicker.open(sel));
+  sync();
+}
+enhanceAssetSelect("chartAssetSelect");
+enhanceAssetSelect("walletAssetFilter");
+/* ============ v9.17: PRECIOS EN VIVO + VIGILANCIA DE LIQUIDACIONES ============ */
+// Un nivel de liquidación cuyo precio ya fue cruzado ya no es fiable: o se liquidó o el dato está viejo.
+function liqCrossed(p){
+  if(!p.liqPx) return false;
+  if(p.verifiedAt && Date.now() - p.verifiedAt < 30000) return false;      // confirmada hace poco: sigue viva
+  const m = getMarkPrice(p.coin, exOfKey(p.address));
+  if(m == null) return false;
+  return p.side === "long" ? m <= p.liqPx * 0.9997 : m >= p.liqPx * 1.0003;
+}
+let midWs = null, midPing = null, midRetry = 0, midRetryTimer = null, riskTimer = null, riskBusy = false;
+const riskLast = {};
+function midsStop(){
+  clearInterval(midPing); clearTimeout(midRetryTimer);
+  if(midWs){ midWs.onclose = null; midWs.onerror = null; midWs.onmessage = null; try{ midWs.close(); }catch(e){} }
+  midWs = null;
+}
+function midsStart(){
+  if(typeof WebSocket === "undefined" || midWs || document.visibilityState === "hidden") return;
+  let ws; try{ ws = new WebSocket(HL_WS); }catch(e){ return; }
+  midWs = ws;
+  ws.onopen = ()=>{
+    midRetry = 0;
+    ws.send(JSON.stringify({ method: "subscribe", subscription: { type: "allMids" } }));
+    midPing = setInterval(()=>{ try{ ws.send(JSON.stringify({ method: "ping" })); }catch(e){} }, 30000);
+  };
+  ws.onmessage = (m)=>{
+    let d; try{ d = JSON.parse(m.data); }catch(e){ return; }
+    if(d.channel !== "allMids" || !d.data || !d.data.mids) return;
+    const mids = d.data.mids;
+    for(const k in mids){ const v = parseFloat(mids[k]); if(isFinite(v)) liveMids[k] = v; }
+    liveMidsAt = Date.now();
+    if(!riskTimer) riskTimer = setTimeout(()=>{ riskTimer = null; riskScan(); }, 3000);
+  };
+  const lost = ()=>{
+    clearInterval(midPing);
+    if(midWs !== ws) return;
+    midWs = null; midRetry++;
+    midRetryTimer = setTimeout(midsStart, Math.min(30000, 1000 * Math.pow(2, midRetry)));
+  };
+  ws.onclose = lost;
+  ws.onerror = ()=>{ try{ ws.close(); }catch(e){} };
+}
+// Vuelve a pedir el estado de una wallet ya mismo (sin esperar al ciclo completo) y procesa liquidaciones/alertas.
+async function quickRefreshWallet(addr){
+  riskLast[addr] = Date.now();
+  const w = state.wallets.find(x => x.address === addr);
+  if(!w) return false;
+  try{
+    const wsr = await fetchWalletState(addr, w);
+    const prev = state.walletPositions.filter(p => p.address === addr);
+    const pos = wsr.positions.map(p => Object.assign({ address: addr, name: walletLabel(w), accountBalance: wsr.accountBalance, verifiedAt: Date.now() }, p));
+    w.accountBalance = wsr.accountBalance; w.account = wsr.account; w.error = false;
+    w.totalPnl = pos.reduce((sum, p) => sum + (p.pnl || 0), 0); w.lastOk = Date.now(); w.quickAt = Date.now();
+    try{ detectWalletLiquidations(prev, pos); }catch(e){ console.warn("quick-liq", e); }
+    try{ processAlerts([w], prev, new Map([[addr, pos]]), nowSec()); }catch(e){ console.warn("quick-alerts", e); }
+    state.walletPositions = state.walletPositions.filter(p => p.address !== addr).concat(pos);
+    return true;
+  }catch(e){ return false; }
+}
+// Cada pocos segundos: las wallets cuya liquidación está cerca (o ya cruzada) se refrescan primero y más seguido.
+async function riskScan(){
+  if(riskBusy || document.visibilityState === "hidden" || !state.walletPositions.length) return;
+  const now = Date.now(), cand = new Map();
+  state.walletPositions.forEach(p=>{
+    if(!p.liqPx || isLtKey(p.address)) return;
+    const m = hlMark(p.coin); if(m == null) return;
+    const d = p.side === "long" ? (m - p.liqPx) / m : (p.liqPx - m) / m;       // <= 0: ya cruzada
+    const every = d <= 0.0003 ? 8000 : d <= 0.01 ? 20000 : d <= 0.03 ? 60000 : 0;
+    if(!every || now - (riskLast[p.address] || 0) < every) return;
+    const cur = cand.get(p.address);
+    if(cur === undefined || d < cur) cand.set(p.address, d);
+  });
+  let changed = false;
+  if(cand.size){
+    const list = Array.from(cand.entries()).sort((a, b) => a[1] - b[1]).slice(0, 10).map(x => x[0]);   // tope para no saturar la API
+    riskBusy = true;
+    try{
+      await runPool(list, async (a)=>{ if(await quickRefreshWallet(a)) changed = true; }, 4);
+    } finally { riskBusy = false; }
+  }
+  if(changed){
+    saveCachedWalletLiqEvents(); saveCachedWalletPositions();
+    renderWalletsChips(); renderWalletsTable(); populateWalletAssetFilter();
+    if(el("wsubPageLiquidated").style.display === "flex") renderWalletLiqHistory();
+    if(wmCurrentAddress){ const w = state.wallets.find(x => x.address === wmCurrentAddress); if(w){ renderWalletModalSummary(w); renderWalletModalPositions(wmCurrentAddress); } }
+  }
+  if(chartPanelOpen){ renderChartLiqOverlay(); if(changed) updateChartMarkers(); renderChartStats(); }
+}
+document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState === "visible") midsStart(); else midsStop(); });
+midsStart();
+
+/* ============ v9.15d: FAVORITOS (activos y wallets) ============ */
+const FAV_ASSETS_KEY = "wwFavAssets_v1";
+var favAssets = loadJson(FAV_ASSETS_KEY, []);
+function isFavAsset(c){ return !!favAssets && favAssets.indexOf(c) >= 0; }
+function toggleFavAsset(c){
+  const i = favAssets.indexOf(c);
+  if(i >= 0) favAssets.splice(i, 1); else favAssets.push(c);
+  saveJson(FAV_ASSETS_KEY, favAssets);
+}
+function toggleFavWallet(addr){
+  const w = state.wallets.find(x => x.address === addr); if(!w) return;
+  w.fav = !w.fav; if(w.fav && !w.favAt) w.favAt = Date.now();
+  saveWallets(); renderWalletsChips(); favRender(); syncWmFav();
+}
+function syncWmFav(){
+  const w = state.wallets.find(x => x.address === wmCurrentAddress), b = el("wmFavBtn");
+  b.textContent = w && w.fav ? "★ Favorita" : "☆ Favorita";
+  b.style.color = w && w.fav ? "#F5D76E" : "";
+}
+el("wmFavBtn").addEventListener("click", ()=>{ if(wmCurrentAddress) toggleFavWallet(wmCurrentAddress); });
+
+const favAgo = (ms) => { const s = Math.max(0, Math.floor((Date.now() - ms) / 1000)); return s < 60 ? s + " s" : s < 3600 ? Math.floor(s / 60) + " min" : s < 86400 ? Math.floor(s / 3600) + " h" : Math.floor(s / 86400) + " d"; };
+const favRiskCls = (d) => d == null ? "" : d <= 3 ? "rr" : d <= 10 ? "ro" : "rg";
+// Resumen completo de una wallet con los datos que la app ya tiene (posiciones, actividad 24 h, alertas, liquidaciones).
+function favInfo(w){
+  const pos = state.walletPositions.filter(p => p.address === w.address), ex = exOfKey(w.address);
+  let L = 0, S = 0, upnl = 0, funding = 0, near = null;
+  const rows = pos.map(p=>{
+    if(p.side === "long") L += p.notional; else S += p.notional;
+    upnl += p.pnl || 0; funding += p.funding || 0;
+    const m = getMarkPrice(p.coin, ex);
+    const d = p.liqPx && m ? (p.side === "long" ? (m - p.liqPx) : (p.liqPx - m)) / m * 100 : null;
+    if(d != null && (near === null || d < near.d)) near = { d, coin: p.coin, liq: p.liqPx };
+    return { p, d };
+  }).sort((a, b) => b.p.notional - a.p.notional);
+  const a = act24[w.address], fills = a && !a.na && a.list ? a.list : null;
+  const evs = state.walletLiqEvents.filter(e => e.address === w.address);
+  const bal = w.accountBalance || 0, tot = L + S;
+  return { rows, L, S, tot, upnl, funding, near, lev: bal > 0 ? tot / bal : null, bias: tot > 0 ? L / tot : null,
+    trades: fills ? fills.length : null, vol: fills ? fills.reduce((x, f) => x + f.px * f.sz, 0) : null, rpnl: fills ? fills.reduce((x, f) => x + (f.pnl || 0), 0) : null,
+    unread: alertsList.filter(x => x.addr === w.address && !x.read).length, lastLiq: evs.length ? Math.max.apply(null, evs.map(e => e.time)) * 1000 : null };
+}
+function favRender(){
+  if(el("wsubPageFav").style.display !== "flex") return;
+  const all = state.wallets.filter(w => w.fav), infos = new Map(all.map(w => [w.address, favInfo(w)]));
+  const sumI = (f) => all.reduce((x, w) => x + (f(infos.get(w.address)) || 0), 0), sumW = (f) => all.reduce((x, w) => x + (f(w) || 0), 0);
+  const L = sumI(i => i.L), S = sumI(i => i.S), bal = sumW(w => w.accountBalance), up = sumI(i => i.upnl);
+  const risky = all.filter(w => { const n = infos.get(w.address).near; return n && n.d <= 10; }).length;
+  let worst = null; all.forEach(w => { const n = infos.get(w.address).near; if(n && (!worst || n.d < worst.d)) worst = { d: n.d, coin: n.coin, w }; });
+  const sg = (v) => (v > 0 ? "+" : "") + fmtUsd(v);
+  el("favStats").innerHTML = [["Favoritas", String(all.length)], ["Balance total", fmtUsd(bal)], ["PnL no realizado", sg(up)], ["Long total", fmtUsd(L)], ["Short total", fmtUsd(S)], ["Neto (L − S)", sg(L - S)],
+    ["Apalancamiento efectivo", bal > 0 ? ((L + S) / bal).toFixed(2) + "×" : "—"], ["En riesgo (<10%)", String(risky)], ["Liq. más cercana", worst ? worst.d.toFixed(1) + "% " + worst.coin : "—"]]
+    .map(x => '<div class="map-card"><small>' + esc(x[0]) + '</small><b>' + esc(x[1]) + '</b></div>').join("");
+  // exposición conjunta por activo
+  const byCoin = {};
+  all.forEach(w => infos.get(w.address).rows.forEach(r => { const c = byCoin[r.p.coin] || (byCoin[r.p.coin] = { L: 0, S: 0, n: new Set() }); if(r.p.side === "long") c.L += r.p.notional; else c.S += r.p.notional; c.n.add(w.address); }));
+  const coins = Object.keys(byCoin).sort((a, b) => (byCoin[b].L + byCoin[b].S) - (byCoin[a].L + byCoin[a].S)).slice(0, 8);
+  el("favExpo").innerHTML = coins.length ? coins.map(c => { const x = byCoin[c], t = x.L + x.S;
+    return '<div class="fx-row">' + coinIconHtml(c, 18) + '<b style="min-width:46px">' + esc(c) + '</b><div class="fx-bar"><i style="width:' + (x.L / t * 100).toFixed(0) + '%"></i></div><span class="fx-amt">' + fmtUsd(t) + '<br><small style="color:var(--text-faint)">' + x.n.size + ' wallet' + (x.n.size > 1 ? "s" : "") + ' · neto ' + sg(x.L - x.S) + '</small></span></div>'; }).join("")
+    + '<div class="map-foot">Barra: verde = long · rojo = short.</div>' : '<div class="map-empty">Sin posiciones abiertas en tus favoritas.</div>';
+  // lista con búsqueda, filtro y orden
+  const q = el("favSearch").value.trim().toLowerCase(), sort = el("favSort").value, flt = el("favFilter").value;
+  let favs = all.slice();
+  if(q) favs = favs.filter(w => (walletLabel(w) + " " + realAddr(w.address) + " " + (w.note || "")).toLowerCase().indexOf(q) >= 0);
+  favs = favs.filter(w => { const i = infos.get(w.address);
+    return flt === "risk" ? (i.near && i.near.d <= 10) : flt === "long" ? (i.bias != null && i.bias >= 0.6) : flt === "short" ? (i.bias != null && i.bias <= 0.4) : flt === "alerts" ? i.unread > 0 : flt === "nopos" ? !i.rows.length : true; });
+  const risk = (w) => { const n = infos.get(w.address).near; return n ? n.d : 1e9; };
+  if(sort === "risk") favs.sort((a, b) => risk(a) - risk(b));
+  else if(sort === "balance") favs.sort((a, b) => (b.accountBalance || 0) - (a.accountBalance || 0));
+  else if(sort === "pnl") favs.sort((a, b) => infos.get(b.address).upnl - infos.get(a.address).upnl);
+  else if(sort === "lev") favs.sort((a, b) => (infos.get(b.address).lev || 0) - (infos.get(a.address).lev || 0));
+  else if(sort === "expo") favs.sort((a, b) => infos.get(b.address).tot - infos.get(a.address).tot);
+  else if(sort === "act") favs.sort((a, b) => (infos.get(b.address).vol || 0) - (infos.get(a.address).vol || 0));
+  else if(sort === "name") favs.sort((a, b) => walletLabel(a).localeCompare(walletLabel(b), undefined, { numeric: true }));
+  else favs.sort((a, b) => (a.favAt || 0) - (b.favAt || 0));
+  el("favCount").textContent = favs.length === all.length ? all.length + " favoritas" : favs.length + " de " + all.length;
+  el("favList").innerHTML = !all.length ? '<div class="wallets-empty-hint">Aún no tienes favoritas. Añade una dirección arriba, elige entre tus wallets, o toca la ☆ en la lista de Wallets.</div>'
+    : !favs.length ? '<div class="wallets-empty-hint">Ninguna favorita coincide con el filtro.</div>' : favs.map(w=>{
+    const f = infos.get(w.address), up = f.upnl;
+    const biasTxt = f.bias == null ? "Sin posiciones" : f.bias >= 0.6 ? "LONG " + Math.round(f.bias * 100) + "%" : f.bias <= 0.4 ? "SHORT " + Math.round((1 - f.bias) * 100) + "%" : "MIXTO";
+    const nearTxt = f.near ? '<span class="' + (f.near.d <= 3 ? "wt-neg" : f.near.d <= 10 ? "" : "wt-pos") + '">' + esc(f.near.coin) + ' ' + f.near.d.toFixed(1) + '% · liq ' + fmtPrice(f.near.liq) + '</span>' : "—";
+    const badges = [];
+    if(f.unread) badges.push('<span class="fc-badge" style="color:#FF6B6B">🔔 ' + f.unread + ' sin leer</span>');
+    if(f.lastLiq) badges.push('<span class="fc-badge" style="color:#FF9F45">💥 liquidada hace ' + favAgo(f.lastLiq) + '</span>');
+    if(f.near && f.near.d <= 3) badges.push('<span class="fc-badge" style="color:#FF6B6B">⚠ riesgo alto</span>');
+    return '<div class="fav-card ' + favRiskCls(f.near ? f.near.d : null) + '" data-addr="' + esc(w.address) + '"><div class="fc-top"><span class="wc-dot' + (w.error ? " err" : "") + '"></span><span class="fc-name">' + esc(walletLabel(w)) + '</span>' + exTag(w.address) +
+      '<span class="fc-bal">' + (w.accountBalance != null ? fmtUsd(w.accountBalance) : "—") + '</span></div>' +
+      (f.bias != null ? '<div class="fc-bias"><span style="min-width:74px;font-weight:800;color:var(--text)">' + biasTxt + '</span><div class="fx-bar"><i style="width:' + (f.bias * 100).toFixed(0) + '%"></i></div><span>' + fmtUsd(f.L) + ' / ' + fmtUsd(f.S) + '</span></div>' : '<div class="fc-bias"><span>Sin posiciones abiertas</span></div>') +
+      '<div class="fc-row"><span>PnL no realizado <b class="' + (up > 0 ? "wt-pos" : up < 0 ? "wt-neg" : "") + '">' + sg(up) + (w.accountBalance > 0 ? " (" + (up / w.accountBalance * 100).toFixed(1) + "%)" : "") + '</b></span>' +
+      '<span>Apal. efectivo <b>' + (f.lev != null ? f.lev.toFixed(2) + "×" : "—") + '</b></span><span>Exposición <b>' + fmtUsd(f.tot) + '</b></span>' +
+      '<span>Liq. más cercana <b>' + nearTxt + '</b></span>' + (f.funding ? '<span>Funding acum. <b class="' + (f.funding > 0 ? "wt-pos" : "wt-neg") + '">' + sg(f.funding) + '</b></span>' : "") +
+      (f.trades != null ? '<span>24 h <b>' + f.trades + ' ops · ' + fmtUsd(f.vol) + '</b></span><span>PnL realizado 24 h <b class="' + (f.rpnl > 0 ? "wt-pos" : f.rpnl < 0 ? "wt-neg" : "") + '">' + sg(f.rpnl) + '</b></span>' : "") +
+      (w.lastOk ? '<span>Datos <b>hace ' + favAgo(w.lastOk) + '</b></span>' : "") + '</div>' +
+      (f.rows.length ? '<div class="fc-pos">' + f.rows.slice(0, 5).map(r => '<span class="fc-chip">' + coinIconHtml(r.p.coin, 14) + esc(r.p.coin) + ' <span class="' + (r.p.side === "long" ? "wt-pos" : "wt-neg") + '">' + (r.p.side === "long" ? "L" : "S") + '</span> ' + fmtUsd(r.p.notional) + (r.p.leverage ? ' · ' + r.p.leverage + '×' : '') + (r.d != null ? ' · liq ' + r.d.toFixed(0) + '%' : '') + '</span>').join("") + (f.rows.length > 5 ? '<span class="fc-chip">+' + (f.rows.length - 5) + '</span>' : '') + '</div>' : "") +
+      (badges.length ? '<div class="fc-badges">' + badges.join("") + '</div>' : "") + (w.note ? '<div class="fc-note">📝 ' + esc(w.note) + '</div>' : "") +
+      '<div class="fc-acts"><span data-fa="note">📝 Nota</span><span data-fa="unfav">★ Quitar</span><span data-fa="open">Ver detalle ›</span></div></div>';
+  }).join("");
+  // actividad reciente (alertas de las favoritas)
+  const set = new Set(all.map(w => w.address)), feed = alertsList.filter(x => x.addr && set.has(x.addr)).slice(0, 8);
+  el("favFeed").innerHTML = feed.length ? feed.map(x => '<div class="fav-feed"><span>' + (ALERT_ICONS[x.type] || "•") + '</span><div><b>' + esc(x.title || "") + '</b><br><small>' + esc(x.text || "") + ' · hace ' + favAgo(x.time * 1000) + '</small></div></div>').join("") : '<div class="map-empty">Todavía no hay movimientos de tus favoritas.</div>';
+  favRenderPick();
+}
+function favRenderPick(){
+  const box = el("favPickBox"); if(!box.open) return;
+  const q = el("favPick").value.trim().toLowerCase();
+  let list = state.wallets.filter(w => !w.fav && (!q || (walletLabel(w) + " " + realAddr(w.address)).toLowerCase().indexOf(q) >= 0));
+  list.sort((a, b) => (b.accountBalance || 0) - (a.accountBalance || 0));
+  const total = list.length; list = list.slice(0, 30);
+  el("favPickList").innerHTML = list.map(w => '<div class="fav-pick"><span class="fp-main">' + esc(walletLabel(w)) + '</span>' + exTag(w.address) + '<b>' + (w.accountBalance != null ? fmtUsd(w.accountBalance) : "—") + '</b><button type="button" data-fp="' + esc(w.address) + '">☆ Añadir</button></div>').join("") +
+    (total > list.length ? '<div class="map-foot">Mostrando 30 de ' + total + ': usa el buscador.</div>' : "") + (!total ? '<div class="map-foot">No hay más wallets para añadir.</div>' : "");
+}
+["favSearch", "favSort", "favFilter"].forEach(id => el(id).addEventListener(id === "favSearch" ? "input" : "change", favRender));
+el("favPick").addEventListener("input", favRenderPick);
+el("favPickBox").addEventListener("toggle", favRenderPick);
+el("favPickList").addEventListener("click", (e)=>{ const b = e.target.closest("[data-fp]"); if(b) toggleFavWallet(b.getAttribute("data-fp")); });
+el("favList").addEventListener("click", (e)=>{
+  const card = e.target.closest(".fav-card"); if(!card) return;
+  const addr = card.getAttribute("data-addr"), act = e.target.closest("[data-fa]");
+  const w = state.wallets.find(x => x.address === addr); if(!w) return;
+  const a = act ? act.getAttribute("data-fa") : "open";
+  if(a === "note"){ const n = prompt("Nota para esta wallet:", w.note || ""); if(n !== null){ w.note = n.trim().slice(0, 140); saveWallets(); favRender(); } }
+  else if(a === "unfav") toggleFavWallet(addr);
+  else openWalletDetail(addr);
+});
+el("favAddBtn").addEventListener("click", ()=>{
+  const raw = el("favAddr").value.trim(), ex = el("favAddEx").value, addr = normalizeAddr(raw);
+  if(!isValidHlAddress(addr)){ toast("Dirección inválida (debe ser 0x… de 42 caracteres)", true); return; }
+  const key = ex === "lt" ? "lt:" + addr : addr;
+  if(!state.wallets.some(w => w.address === key)) addWalletEntry(raw, "", ex);
+  const w = state.wallets.find(x => x.address === key);
+  if(w){ w.fav = true; w.favAt = w.favAt || Date.now(); saveWallets(); renderWalletsChips(); favRender(); el("favAddr").value = ""; toast("Añadida a favoritas"); }
+});
+// Monitoreo reforzado: las favoritas de Hyperliquid se vuelven a consultar cada ~25 s sin esperar al ciclo completo.
+setInterval(async ()=>{
+  if(document.visibilityState === "hidden") return;
+  const now = Date.now();
+  const due = state.wallets.filter(w => w.fav && !isLtKey(w.address) && now - (riskLast[w.address] || 0) > 25000).slice(0, 4);
+  if(!due.length) return;
+  let changed = false;
+  for(const w of due) if(await quickRefreshWallet(w.address)) changed = true;
+  if(changed){ renderWalletsChips(); renderWalletsTable(); favRender(); }
+}, 6000);
+setInterval(favRender, 15000);      // refresca las edades ("hace X s") y los datos mientras el panel está abierto
+el("chartRefreshBtn").addEventListener("click", ()=>{ if(state.chartCoin) loadChartData(); });
+el("toggleLiqLinesBtn").classList.toggle("active", state.chartLiqLinesOn);
+el("toggleLiqLinesBtn").addEventListener("click", ()=>{
+  state.chartLiqLinesOn = !state.chartLiqLinesOn;
+  el("toggleLiqLinesBtn").classList.toggle("active", state.chartLiqLinesOn);
+  saveSettings();
+  renderChartLiqOverlay();
+});
+
+/* ---- abrir / cerrar panel ---- */
+let chartPanelOpen = false;
+let chartAutoTimer = null;
+function openChartPanel(){
+  populateChartAssetOptions();
+  el("chartModalBackdrop").style.display = "flex";
+  chartPanelOpen = true;
+  renderChartStats();
+  requestAnimationFrame(()=>{
+    const wrap = el("chartBodyWrap");
+    miniChart.resize(wrap.clientWidth, wrap.clientHeight);
+    resizeChartLiqCanvas();
+    if(state.chartCoin) loadChartData();
+  });
+  clearInterval(chartAutoTimer);
+  chartAutoTimer = setInterval(()=>{ if(state.chartCoin) loadChartData(); }, CHART_AUTO_REFRESH_MS);
+}
+function closeChartPanel(){
+  el("chartModalBackdrop").style.display = "none";
+  chartPanelOpen = false;
+  clearInterval(chartAutoTimer);
+  chartWsStop();
+}
+el("openChartBtn").addEventListener("click", openChartPanel);
+el("cmCloseBtn").addEventListener("click", closeChartPanel);
+el("chartModalBackdrop").addEventListener("click", (e)=>{
+  if(e.target.id === "chartModalBackdrop") closeChartPanel();
+});
+
+/* ============================= COMPARTIR IMAGEN ============================= */
+// html2canvas se carga bajo demanda (recién cuando el usuario toca "Compartir"),
+// probando más de un CDN por si alguno está bloqueado por la red/VPN del usuario.
+let html2canvasLoadPromise = null;
+function loadScriptOnce(src){
+  return new Promise((resolve, reject)=>{
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("no se pudo cargar " + src));
+    document.head.appendChild(s);
+  });
+}
+async function ensureHtml2Canvas(){
+  if(window.html2canvas) return;
+  if(html2canvasLoadPromise) return html2canvasLoadPromise;
+  const sources = [
+    "https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
+    "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"
+  ];
+  html2canvasLoadPromise = (async ()=>{
+    for(const src of sources){
+      try{
+        await loadScriptOnce(src);
+        if(window.html2canvas) return;
+      } catch(e){ /* probamos la siguiente fuente */ }
+    }
+    html2canvasLoadPromise = null; // permite reintentar en el próximo toque
+    throw new Error("No se pudo cargar el motor de imágenes desde ningún servidor.");
+  })();
+  return html2canvasLoadPromise;
+}
+
+// Convierte un elemento del DOM en una imagen PNG y la comparte (Web Share API con
+// archivos) o, si el navegador no lo soporta, la descarga directamente.
+async function captureAndShare(targetEl, filename, title){
+  try{
+    await ensureHtml2Canvas();
+  } catch(e){
+    alert("No se pudo cargar el motor de imágenes. Revisa tu conexión a internet e intenta de nuevo.");
+    return;
+  }
+  try{
+    const canvas = await html2canvas(targetEl, {
+      backgroundColor: "#07100f",
+      scale: Math.min(2, window.devicePixelRatio || 1),
+      useCORS: true,
+      logging: false
+    });
+    canvas.toBlob(async (blob)=>{
+      if(!blob) return;
+      const file = new File([blob], filename, { type: "image/png" });
+      if(navigator.canShare && navigator.canShare({ files:[file] })){
+        try{
+          await navigator.share({ files:[file], title: title || "WhaleWatch" });
+          return;
+        } catch(err){
+          if(err && err.name === "AbortError") return; // el usuario canceló el share
+          // si el share falla por otra razón, seguimos abajo con la descarga
+        }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(()=> URL.revokeObjectURL(url), 4000);
+    }, "image/png");
+  } catch(err){
+    console.warn("captura de imagen falló", err);
+    alert("No se pudo generar la imagen. Intenta de nuevo.");
+  }
+}
+
+// Posiciones: arma una tarjeta "reporte" fuera de pantalla (clonando la tabla ya
+// filtrada) para compartir una imagen limpia, sin los botones ni el menú.
+function buildPositionsExportNode(){
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "width:840px;background:#07100f;color:#DCEAE6;font-family:Inter,sans-serif;padding:26px;";
+  const filterTxt = state.walletAssetFilter ? ("Activo: " + state.walletAssetFilter) : "Todos los activos";
+  const head = document.createElement("div");
+  head.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:4px;";
+  head.innerHTML = `
+    <span style="width:10px;height:10px;border-radius:50%;background:#5FE3B8;box-shadow:0 0 8px #5FE3B8;"></span>
+    <span style="font-weight:800;font-size:17px;color:#97FCE4;letter-spacing:.3px;">WHALEWATCH</span>
+  `;
+  const sub = document.createElement("div");
+  sub.style.cssText = "font-size:11.5px;color:#7C958E;margin:4px 0 16px;font-family:'JetBrains Mono',monospace;";
+  sub.textContent = filterTxt + " · " + new Date().toLocaleString();
+  const tableWrapDiv = document.createElement("div");
+  tableWrapDiv.style.cssText = "border:1px solid rgba(151,252,228,0.15);border-radius:12px;overflow:hidden;";
+  const tableClone = el("walletsTableBody").closest("table").cloneNode(true);
+  tableClone.style.width = "100%";
+  tableWrapDiv.appendChild(tableClone);
+  wrap.appendChild(head);
+  wrap.appendChild(sub);
+  wrap.appendChild(tableWrapDiv);
+  return wrap;
+}
+async function sharePositionsImage(){
+  const node = buildPositionsExportNode();
+  node.style.position = "fixed";
+  node.style.left = "-9999px";
+  node.style.top = "0";
+  document.body.appendChild(node);
+  try{
+    await captureAndShare(node, "whalewatch-posiciones.png", "Posiciones — WhaleWatch");
+  } finally {
+    document.body.removeChild(node);
+  }
+}
+el("sharePositionsBtn").addEventListener("click", sharePositionsImage);
+
+// Gráfico: se captura el panel visible tal cual (título, controles, velas,
+// liquidaciones y leyenda), porque el canvas de las velas no se puede clonar.
+async function shareChartImage(){
+  if(!state.chartCoin){ alert("Selecciona un activo con posiciones abiertas primero."); return; }
+  // Solo capturamos las estadísticas + el gráfico en sí, sin el título/controles de
+  // arriba ni la leyenda de abajo.
+  await captureAndShare(el("chartShareArea"), "whalewatch-grafico-"+state.chartCoin+".png", "Gráfico "+state.chartCoin+" — WhaleWatch");
+}
+el("shareChartBtn").addEventListener("click", shareChartImage);
+
+/* ============================= INIT ============================= */
+
+/* ============================= v9.1: ALERTAS, RESPALDO, RESUMEN ============================= */
+function toast(msg, isErr, onTap){
+  const t = document.createElement("div");
+  t.className = "toast" + (isErr ? " err" : "");
+  t.textContent = msg;
+  t.addEventListener("click", ()=>{ t.remove(); if(onTap) onTap(); });
+  document.body.appendChild(t);
+  setTimeout(()=> t.remove(), 6000);
+}
+function loadJson(key, def){ try{ const r = localStorage.getItem(key); return r ? JSON.parse(r) : def; }catch(e){ return def; } }
+function saveJson(key, v){ try{ localStorage.setItem(key, JSON.stringify(v)); }catch(e){} }
+
+const ALERTS_KEY = "wwAlerts_v1", RISK_KEY = "wwRiskFlags_v1";
+let alertsList = loadJson(ALERTS_KEY, []);
+let riskFlags = loadJson(RISK_KEY, {});
+let startupToastShown = false;
+const ALERT_ICONS = { open:"🟢", close:"⚪", size:"🟠", risk:"🔴", liq:"💥" };
+
+function unreadCount(){ return alertsList.filter(a => !a.read).length; }
+function updateBell(){
+  const n = unreadCount(), b = el("bellBadge");
+  b.textContent = n > 99 ? "99+" : n;
+  b.style.display = n ? "flex" : "none";
+}
+function agoTxt(t){
+  const d = nowSec() - t;
+  if(d < 60) return "hace un momento";
+  if(d < 3600) return "hace " + Math.floor(d/60) + " min";
+  if(d < 86400) return "hace " + Math.floor(d/3600) + " h";
+  return new Date(t*1000).toLocaleString();
+}
+function renderAlerts(){
+  el("alertsSub").textContent = alertsList.length ? unreadCount() + " sin leer · " + alertsList.length + " guardadas · toca una para ir a la wallet" : "";
+  const base = alertPrefs.onlyNotified ? alertsList.filter(a => a.notify !== false) : alertsList;
+  // Las pendientes (sin leer) van primero, de la más nueva a la más vieja; después las ya leídas.
+  const byNew = (x, y) => (y.time || 0) - (x.time || 0);
+  const pend = base.filter(a => !a.read).sort(byNew), done = base.filter(a => a.read).sort(byNew);
+  const shown = pend.concat(done);
+  const head = (t) => `<div class="alert-group">${t}</div>`;
+  el("alertsList").innerHTML = shown.length ? (pend.length ? head("Pendientes · " + pend.length) : "") + shown.map((a, i) =>
+    (pend.length && done.length && i === pend.length ? head("Anteriores") : "") +
+    `<div class="alert-row clickable${a.read ? "" : " unread"}${a.notify === false ? " quiet" : ""}" data-id="${esc(a.id)}"><span class="ai">${ALERT_ICONS[a.type] || "•"}</span><div><div class="alert-title">${esc(a.title || "")}${a.notify === false ? '<span class="quiet-tag">guardada, sin aviso</span>' : ""}</div><div class="alert-text">${esc(a.text)}</div><div class="at">${esc(agoTxt(a.time))} · ver wallet ›</div></div></div>`
+  ).join("") : '<div class="wallets-empty-hint">Aún no hay alertas. Aquí verás aperturas, cierres, cambios grandes de tamaño, riesgo de liquidación y liquidaciones.</div>';
+}
+function saveAlerts(){ if(alertsList.length > 300) alertsList = alertsList.slice(0,300); saveJson(ALERTS_KEY, alertsList); saveJson(RISK_KEY, riskFlags); updateBell(); }
+function openAlerts(){
+  renderAlerts(); el("alertsBackdrop").style.display = "flex";
+  let n = el("alertsList"); while(n){ n.scrollTop = 0; n = n.parentElement; }   // siempre abre arriba, donde están las pendientes
+}
+function closeAlerts(){
+  el("alertsBackdrop").style.display = "none";
+  saveAlerts();   // cerrar el panel NO marca nada como leído: una alerta queda pendiente hasta que la toques
+}
+
+function sysNotify(list){
+  try{
+    if(!("Notification" in window) || Notification.permission !== "granted") return;
+    list.slice(0,3).forEach(a=>{
+      const opts = { body: (a.title ? a.title + "\n" : "") + String(a.text).split("\n").slice(0,2).join("\n"), icon: "./icons/icon-192.png", tag: a.id };
+      if(navigator.serviceWorker && navigator.serviceWorker.ready){
+        navigator.serviceWorker.ready.then(r => r.showNotification("WhaleWatch", opts)).catch(()=>{});
+      } else { new Notification("WhaleWatch", opts); }
+    });
+  }catch(e){}
+}
+
+const PREFS_KEY = "wwAlertPrefs_v1";
+const alertPrefs = Object.assign({ assetMode: "all", assetList: [], minNotional: 0, minBalance: 0, sizePct: 25, riskPct: 10, applyToLiq: false, onlyNotified: false }, loadJson(PREFS_KEY, {}));
+alertPrefs.types = Object.assign({ open: true, close: true, size: true, risk: true, liq: true }, alertPrefs.types || {});
+function savePrefs(){ saveJson(PREFS_KEY, alertPrefs); }
+function shouldNotify(type, p, w, extra){
+  const pr = alertPrefs;
+  if(!pr.types[type]) return false;
+  if(pr.assetMode === "only" && pr.assetList.indexOf(p.coin) < 0) return false;
+  if(pr.assetMode === "except" && pr.assetList.indexOf(p.coin) >= 0) return false;
+  if(extra && extra.ok === false) return false;
+  if(type === "liq" && !pr.applyToLiq) return true;   // las liquidaciones avisan siempre (salvo que las apagues o actives el filtro)
+  const bal = type === "liq" ? Math.max(p.accountBalance || 0, w.accountBalance || 0) : (w.accountBalance != null ? w.accountBalance : p.accountBalance);
+  if(pr.minNotional > 0 && !(p.notional >= pr.minNotional)) return false;
+  if(pr.minBalance > 0 && !(bal >= pr.minBalance)) return false;
+  return true;
+}
+function renderAlertSettings(){
+  const pr = alertPrefs, box = el("alertsSettings");
+  const tp = (k, l)=> `<label><input type="checkbox" data-t="${k}" ${pr.types[k] ? "checked" : ""}>${l}</label>`;
+  box.innerHTML = `
+    <div class="hint">Todo se guarda en el historial. Aquí eliges qué te <b>avisa</b> (contador 🔔, aviso en pantalla y aviso del sistema). Las demás quedan atenuadas.</div>
+    <div class="types">${tp("open","Aperturas")}${tp("close","Cierres")}${tp("size","Cambios de tamaño")}${tp("risk","Riesgo de liquidación")}${tp("liq","Liquidaciones")}</div>
+    <div class="row"><span>Activos</span><select data-am><option value="all">Todos</option><option value="only">Solo los elegidos</option><option value="except">Todos menos los elegidos</option></select></div>
+    <div id="assetPickWrap">
+      <input type="search" id="assetSearch" placeholder="Buscar activo…" aria-label="Buscar activo">
+      <div class="mini"><button type="button" data-act="fromPos">Los que tienen posiciones ahora</button><button type="button" data-act="clear">Limpiar</button></div>
+      <div class="assetchips" id="assetChips"></div>
+      <div class="hint" id="assetCount"></div>
+    </div>
+    <div class="row"><span>Tamaño mínimo de la posición (USD)</span><input type="number" min="0" step="1000" inputmode="decimal" data-k="minNotional" value="${pr.minNotional}"></div>
+    <div class="row"><span>Balance mínimo de la wallet (USD)</span><input type="number" min="0" step="10000" inputmode="decimal" data-k="minBalance" value="${pr.minBalance}"></div>
+    <div class="row"><span>Cambio de tamaño desde (%)</span><input type="number" min="1" max="500" data-k="sizePct" value="${pr.sizePct}"></div>
+    <div class="row"><span>Riesgo si está a menos de (%)</span><input type="number" min="1" max="50" data-k="riskPct" value="${pr.riskPct}"></div>
+    <label><input type="checkbox" data-b="applyToLiq" ${pr.applyToLiq ? "checked" : ""}>Aplicar tamaño y balance mínimos también a liquidaciones</label>
+    <label><input type="checkbox" data-b="onlyNotified" ${pr.onlyNotified ? "checked" : ""}>Mostrar en la lista solo las que me avisan</label>
+    <div class="hint">0 = sin mínimo. Los cambios aplican a las alertas nuevas; las ya guardadas no cambian.</div>`;
+  box.querySelector("[data-am]").value = pr.assetMode;
+  renderAssetChips();
+}
+function allAssetNames(){
+  const set = new Set(alertPrefs.assetList);
+  (state.universe || []).forEach(u => u && u.name && set.add(u.name));
+  lt.bySym.forEach((m, s) => set.add(s));
+  state.walletPositions.forEach(p => set.add(p.coin));
+  const inPos = new Set(state.walletPositions.map(p => p.coin));
+  return Array.from(set).sort((a,b)=>{
+    const sa = alertPrefs.assetList.indexOf(a) >= 0, sb = alertPrefs.assetList.indexOf(b) >= 0;
+    if(sa !== sb) return sa ? -1 : 1;
+    const ia = inPos.has(a), ib = inPos.has(b);
+    if(ia !== ib) return ia ? -1 : 1;
+    return a.localeCompare(b);
+  });
+}
+function renderAssetChips(){
+  const pr = alertPrefs, wrap = el("assetPickWrap");
+  if(!wrap) return;
+  wrap.style.display = pr.assetMode === "all" ? "none" : "flex";
+  wrap.style.flexDirection = "column"; wrap.style.gap = "8px";
+  const q = (el("assetSearch").value || "").trim().toLowerCase();
+  const list = allAssetNames().filter(c => !q || c.toLowerCase().indexOf(q) >= 0);
+  list.sort((a, b) => (isFavAsset(b) ? 1 : 0) - (isFavAsset(a) ? 1 : 0));      // favoritos arriba
+  el("assetChips").innerHTML = list.length ? list.map(c => `<span class="chipa${pr.assetList.indexOf(c) >= 0 ? " on" : ""}" role="button" tabindex="0" data-c="${esc(c)}"><span class="chip-star${isFavAsset(c) ? " on" : ""}" data-star="${esc(c)}">${isFavAsset(c) ? "★" : "☆"}</span>${esc(c)}</span>`).join("") : '<span class="hint">Sin resultados</span>';
+  el("assetCount").textContent = pr.assetMode === "only"
+    ? (pr.assetList.length ? "Avisará solo de " + pr.assetList.length + " activo(s)." : "Elige al menos uno: ahora no avisará de ninguno.")
+    : (pr.assetList.length ? "Se silencian " + pr.assetList.length + " activo(s)." : "Elige los activos a silenciar.");
+}
+el("alertsSettings").addEventListener("change", (e)=>{
+  const n = e.target, pr = alertPrefs;
+  if(n.hasAttribute("data-am")){ pr.assetMode = n.value; renderAssetChips(); }
+  else if(n.dataset.t) pr.types[n.dataset.t] = n.checked;
+  else if(n.dataset.b) pr[n.dataset.b] = n.checked;
+  else if(n.dataset.k){ const v = parseFloat(n.value); pr[n.dataset.k] = isFinite(v) && v >= 0 ? v : 0; if((n.dataset.k === "sizePct" || n.dataset.k === "riskPct") && !pr[n.dataset.k]) pr[n.dataset.k] = n.dataset.k === "sizePct" ? 25 : 10; n.value = pr[n.dataset.k]; }
+  savePrefs(); renderAlerts();
+});
+el("alertsSettings").addEventListener("click", (e)=>{
+  const star = e.target.closest("[data-star]");
+  if(star){ toggleFavAsset(star.getAttribute("data-star")); renderAssetChips(); return; }
+  const chip = e.target.closest(".chipa"), act = e.target.closest("[data-act]");
+  if(chip){
+    const c = chip.getAttribute("data-c"), i = alertPrefs.assetList.indexOf(c);
+    if(i >= 0) alertPrefs.assetList.splice(i, 1); else alertPrefs.assetList.push(c);
+  } else if(act){
+    if(act.getAttribute("data-act") === "clear") alertPrefs.assetList = [];
+    else alertPrefs.assetList = Array.from(new Set(alertPrefs.assetList.concat(state.walletPositions.map(p => p.coin))));
+  } else return;
+  savePrefs(); renderAssetChips(); renderAlerts();
+});
+el("alertsSettings").addEventListener("input", (e)=>{ if(e.target.id === "assetSearch") renderAssetChips(); });
+el("alertsCfgBtn").addEventListener("click", ()=>{
+  const box = el("alertsSettings");
+  const open = box.style.display === "flex";
+  if(!open) renderAlertSettings();
+  box.style.display = open ? "none" : "flex";
+});
+
+function processAlerts(wallets, prev, fresh, cycleStart){
+  const created = [];
+  const sd = (x)=> x === "long" ? "LONG" : "SHORT";
+  const lv = (p)=> p.leverage ? p.leverage + "×" + (p.leverageType === "cross" ? " cruzada" : p.leverageType === "isolated" ? " aislada" : "") : "";
+  const acct = (p)=> p.accountBalance > 0 ? (p.notional / p.accountBalance * 100).toFixed(0) + "% de la cuenta" : "";
+  const add = (type, w, p, title, lines, detail, extra)=>{
+    const nt = shouldNotify(type, p, w, extra);   // todo se guarda; solo avisa lo que cumple tus filtros
+    const a = { id: Date.now() + "-" + Math.random().toString(36).slice(2,6), time: nowSec(), read: !nt, notify: nt, type, addr: w.address, coin: p.coin,
+      title: title + " · " + walletLabel(w), text: lines.filter(Boolean).join("\n"), detail: detail || null };
+    alertsList.unshift(a); if(nt) created.push(a);
+  };
+  wallets.forEach(w=>{
+    if(!fresh.has(w.address)) return;
+    const now = fresh.get(w.address);
+    const before = prev.filter(p => p.address === w.address);
+    const known = w.seen || before.length > 0;
+    const bmap = new Map(before.map(p => [p.coin, p]));
+    const nmap = new Map(now.map(p => [p.coin, p]));
+    if(known){
+      now.forEach(p=>{
+        const o = bmap.get(p.coin);
+        const head = sd(p.side) + " " + p.coin + " · " + lv(p);
+        if(!o || o.side !== p.side){
+          const k = okey(p.address, p.coin, p.side);
+          openMap[k] = { t: Date.now(), exact: false, approx: true };
+          queueFills(w.address, true);
+          add(o ? "size" : "open", w, p, o ? "Cambio de lado" : "Nueva posición", [
+            head,
+            "Nocional " + fmtUsd(p.notional) + " · entrada " + fmtPrice(p.entryPx) + (acct(p) ? " · " + acct(p) : ""),
+            o ? "Antes era " + sd(o.side) + " (" + fmtUsd(o.notional) + ")" : "Detectada ahora; la hora real de inicio se calcula en segundos"
+          ]);
+        } else if(o.size > 0){
+          const ch = (p.size - o.size) / o.size * 100;
+          if(Math.abs(ch) >= Math.min(10, alertPrefs.sizePct)) add("size", w, p, ch > 0 ? "Posición aumentada" : "Posición reducida", [
+            head,
+            "De " + fmtUsd(o.notional) + " a " + fmtUsd(p.notional) + " (" + sgn(ch) + ch.toFixed(0) + "% de tamaño)",
+            "Entrada " + fmtPrice(p.entryPx) + " · PnL " + sgn(p.pnl) + fmtUsd(p.pnl)
+          ], null, { ok: Math.abs(ch) >= alertPrefs.sizePct });
+        }
+      });
+      before.forEach(o=>{
+        if(nmap.has(o.coin)) return;
+        const ev = state.walletLiqEvents.find(e => e.address === o.address && e.coin === o.coin && e.time >= cycleStart - 5);
+        const oi = openInfo(o);
+        const dur = oi ? "Abierta " + oi.date + " · duró " + oi.elapsed : "";
+        if(ev){
+          add("liq", w, o, "LIQUIDACIÓN", [
+            sd(o.side) + " " + o.coin + " · " + lv(o) + " · " + fmtUsd(o.notional) + " liquidados",
+            "Entrada " + fmtPrice(o.entryPx) + " → liquidación " + fmtPrice(ev.price),
+            dur,
+            (acct(o) ? "Representaba el " + acct(o) + " " : "") + (o.accountBalance != null ? "(balance antes: " + fmtUsd(o.accountBalance) + ")" : ""),
+            "Balance actual: " + (w.accountBalance != null ? fmtUsd(w.accountBalance) : "—")
+          ], { evTime: ev.time });
+        } else {
+          add("close", w, o, "Posición cerrada", [
+            sd(o.side) + " " + o.coin + " · " + lv(o) + " · " + fmtUsd(o.notional),
+            dur,
+            "PnL no realizado en la última lectura: " + sgn(o.pnl) + fmtUsd(o.pnl)
+          ]);
+        }
+      });
+    }
+    now.forEach(p=>{
+      const key = w.address + "|" + p.coin, mark = getMarkPrice(p.coin, exOfKey(p.address));
+      const d = (p.liqPx && mark) ? Math.abs(mark - p.liqPx) / mark * 100 : null;
+      if(d == null) return;
+      const T2 = alertPrefs.riskPct, T1 = Math.max(15, T2), fl = riskFlags[key] || 0;
+      const riskLines = [
+        sd(p.side) + " " + p.coin + " · " + lv(p) + " · " + fmtUsd(p.notional),
+        "Precio actual " + fmtPrice(mark) + " · liquidación " + fmtPrice(p.liqPx) + " (a " + d.toFixed(1) + "%)"
+      ];
+      if(d < T1 && !(fl & 1)){
+        riskFlags[key] = fl | 1 | (d < T2 ? 2 : 0);
+        add("risk", w, p, "Riesgo de liquidación", riskLines, null, { ok: d < T2 });
+      } else if(d < T2 && !(fl & 2)){
+        riskFlags[key] = fl | 2;
+        add("risk", w, p, "Riesgo de liquidación", riskLines, null, { ok: true });
+      } else if(d > T1 + 5 && fl) delete riskFlags[key];
+    });
+    before.forEach(o=>{ if(!nmap.has(o.coin)) delete riskFlags[w.address + "|" + o.coin]; });
+    w.seen = true;
+  });
+  saveWallets();
+  saveAlerts();
+  if(created.length){
+    toast("🔔 " + created.length + " alerta" + (created.length === 1 ? "" : "s") + " nueva" + (created.length === 1 ? "" : "s"), false, openAlerts);
+    sysNotify(created);
+  } else if(!startupToastShown && unreadCount()){
+    toast("🔔 Tienes " + unreadCount() + " alerta(s) sin leer", false, openAlerts);
+  }
+  startupToastShown = true;
+}
+
+el("bellBtn").addEventListener("click", openAlerts);
+el("alertsCloseBtn").addEventListener("click", closeAlerts);
+el("alertsBackdrop").addEventListener("click", (e)=>{ if(e.target.id === "alertsBackdrop") closeAlerts(); });
+el("alertsReadBtn").addEventListener("click", ()=>{ alertsList.forEach(a => a.read = true); saveAlerts(); renderAlerts(); });
+el("alertsClearBtn").addEventListener("click", ()=>{ if(confirm("¿Borrar todas las alertas?")){ alertsList = []; riskFlags = {}; saveAlerts(); renderAlerts(); } });
+el("alertsNotifBtn").addEventListener("click", async ()=>{
+  if(!("Notification" in window)){ toast("Este navegador no admite avisos del sistema.", true); return; }
+  const r = await Notification.requestPermission();
+  toast(r === "granted" ? "Avisos del sistema activados (con la app abierta)." : "Permiso no concedido.", r !== "granted");
+});
+updateBell();
+
+/* ---- resumen, búsqueda y orden ---- */
+function renderWalletsSummary(rows, distOf){
+  let lg = 0, sh = 0, pnl = 0, risk = 0;
+  const addrs = new Set();
+  rows.forEach(p=>{
+    if(p.side === "long") lg += p.notional; else sh += p.notional;
+    pnl += p.pnl || 0; addrs.add(p.address);
+    if(distOf(p) < RISK_ENTER) risk++;
+  });
+  const item = (l, v, c)=> `<div>${l}<b style="${c ? "color:" + c : ""}">${v}</b></div>`;
+  el("walletsSummary").innerHTML = rows.length ? [
+    item("Long", fmtUsd(lg), "var(--mint)"), item("Short", fmtUsd(sh), "var(--red)"),
+    item("Neto", (lg - sh >= 0 ? "+" : "") + fmtUsd(lg - sh)),
+    item("PnL", (pnl > 0 ? "+" : "") + fmtUsd(pnl), pnl >= 0 ? "var(--mint)" : "var(--red)"),
+    item("Wallets", addrs.size), item("En riesgo", risk, risk ? "var(--red)" : "")
+  ].join("") : "";
+}
+el("wlSearch").addEventListener("input", (e)=>{ wlSearch = e.target.value; wlLimit = 60; renderWalletsChips(); });
+el("wlSort").addEventListener("change", (e)=>{ wlSort = e.target.value; wlLimit = 60; renderWalletsChips(); });
+el("wlEx").addEventListener("change", (e)=>{ wlEx = e.target.value; wlLimit = 60; renderWalletsChips(); });
+el("walletSearch").addEventListener("input", (e)=>{ state.walletSearch = e.target.value; renderWalletsTable(); });
+el("walletSort").addEventListener("change", (e)=>{ state.walletSort = e.target.value; renderWalletsTable(); });
+
+/* ---- respaldo ---- */
+function downloadText(name, text, type){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], {type}));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=> URL.revokeObjectURL(a.href), 4000);
+}
+el("exportJsonBtn").addEventListener("click", ()=>{
+  downloadText("whalewatch-respaldo-" + new Date().toISOString().slice(0,10) + ".json", JSON.stringify({
+    app: "whalewatch", version: 2, exported: new Date().toISOString(),
+    wallets: state.wallets.map(w => ({ address: realAddr(w.address), ex: exOfKey(w.address), name: w.name || "" })),
+    settings: loadSettings() || {}, alerts: alertsList, liqEvents: state.walletLiqEvents
+  }, null, 2), "application/json");
+  toast("Respaldo exportado.");
+});
+el("importJsonBtn").addEventListener("click", ()=> el("importFile").click());
+el("importFile").addEventListener("change", async (e)=>{
+  const f = e.target.files && e.target.files[0]; e.target.value = "";
+  if(!f) return;
+  try{
+    const d = JSON.parse(await f.text());
+    if(!d || d.app !== "whalewatch" || !Array.isArray(d.wallets)) throw new Error("formato");
+    let added = 0, skipped = 0;
+    d.wallets.forEach(w=>{
+      const rawA = normalizeAddr(String((w && w.address) || ""));
+      const isLt = (w && w.ex === "lt") || isLtKey(rawA);
+      const base = isLtKey(rawA) ? rawA.slice(3) : rawA;
+      const a = isLt ? "lt:" + base : base;
+      if(!isValidHlAddress(base) || state.wallets.some(x => x.address === a)){ skipped++; return; }
+      state.wallets.push({ address: a, name: String((w && w.name) || "").slice(0,60) }); added++;
+    });
+    if(Array.isArray(d.alerts) && !alertsList.length) alertsList = d.alerts.filter(a => a && a.text).slice(0,300);
+    saveWallets(); saveAlerts(); renderWalletsChips(); updateBell();
+    toast("Importadas " + added + " wallet(s)" + (skipped ? " · " + skipped + " omitidas (inválidas o repetidas)" : ""));
+    if(added) refreshAllWallets();
+  }catch(err){ toast("El archivo no es un respaldo válido de WhaleWatch.", true); }
+});
+el("csvBtn").addEventListener("click", ()=>{
+  const q = v => '"' + String(v == null ? "" : v).replace(/"/g,'""') + '"';
+  const head = ["Wallet","Direccion","Exchange","Activo","Lado","Apalancamiento","Entrada","Nocional","PnL","Balance","Liquidacion"];
+  const lines = [head.join(",")].concat(state.walletPositions.map(p =>
+    [p.name, realAddr(p.address), exLabel(p.address), p.coin, p.side, p.leverage, p.entryPx, p.notional, p.pnl, p.accountBalance, p.liqPx].map(q).join(",")));
+  downloadText("whalewatch-posiciones-" + new Date().toISOString().slice(0,10) + ".csv", "\ufeff" + lines.join("\n"), "text/csv");
+});
+
+/* ---- modal de wallet ---- */
+el("wmCopyBtn").addEventListener("click", async ()=>{
+  try{ await navigator.clipboard.writeText(el("wmAddr").textContent); toast("Dirección copiada."); }
+  catch(e){ toast("No se pudo copiar.", true); }
+});
+
+
+/* ============================= v9.2: INICIO DE POSICIÓN Y ACTIVIDAD 24 H ============================= */
+function okey(a, c, sd){ return a + "|" + c + "|" + sd; }
+function getOpen(p){ return openMap[okey(p.address, p.coin, p.side)] || null; }
+function fmtDT(ms){
+  const d = new Date(ms), y = d.getFullYear() !== new Date().getFullYear();
+  return d.toLocaleString(undefined, {day:"2-digit", month:"short", year: y ? "numeric" : undefined, hour:"2-digit", minute:"2-digit"});
+}
+function fmtElapsed(ms){
+  ms = Math.max(0, ms);
+  const d = Math.floor(ms / DAY), h = Math.floor(ms % DAY / 3600000), m = Math.floor(ms % 3600000 / 60000);
+  if(d > 0) return d + "d " + h + "h";
+  if(h > 0) return h + "h " + m + "m";
+  return m > 0 ? m + "m" : "<1m";
+}
+function openInfo(p){
+  const o = getOpen(p); if(!o) return null;
+  const age = Date.now() - o.t;
+  return { date: fmtDT(o.t), elapsed: fmtElapsed(age), approx: !!o.approx && !o.exact, bound: !!o.bound, fresh: age < DAY };
+}
+function openCell(p){
+  const oi = openInfo(p);
+  if(!oi) return '<span class="dist">calculando…</span>';
+  return (oi.approx ? "~ " : oi.bound ? "antes de " : "") + oi.date + (oi.fresh ? '<span class="tag24">24h</span>' : "") +
+    '<div class="dist">' + (oi.bound ? "≥ " : oi.approx ? "~ " : "") + oi.elapsed + ' abierta</div>';
+}
+function stats24(addr, coin){
+  const a = act24[addr]; if(!a) return null;
+  const cut = Date.now() - DAY;
+  const list = a.list.filter(f => f.time >= cut && (coin == null || f.coin === coin));
+  const oids = new Set(list.map(f => f.oid != null ? f.oid : f.time));
+  let added = 0, reduced = 0, pnl = 0, last = 0;
+  list.forEach(f=>{
+    const v = f.px * f.sz;
+    if(/^Open/.test(f.dir)) added += v; else if(/^Close/.test(f.dir) || f.dir.indexOf(">") >= 0) reduced += v;
+    pnl += f.pnl || 0; if(f.time > last) last = f.time;
+  });
+  return { ops: oids.size, added, reduced, pnl, last };
+}
+function act24Cell(p){
+  if(act24[p.address] && act24[p.address].na) return '<span class="dist">n/d</span>';
+  const st = stats24(p.address, p.coin);
+  if(!st) return '<span class="dist">…</span>';
+  if(!st.ops) return '<span class="dist">sin operaciones</span>';
+  return st.ops + " op" + (st.ops === 1 ? "" : "s") + '<div class="dist">+' + fmtUsd(st.added) + " / −" + fmtUsd(st.reduced) + "</div>";
+}
+
+const fillQueue = [], fillSet = new Set();
+let fillBusy = false;
+function queueFills(addr, front){
+  if(fillSet.has(addr)){
+    if(front){ const i = fillQueue.indexOf(addr); if(i > 0){ fillQueue.splice(i, 1); fillQueue.unshift(addr); } }
+    return;
+  }
+  fillSet.add(addr);
+  front ? fillQueue.unshift(addr) : fillQueue.push(addr);
+  pumpFills();
+}
+async function pumpFills(){
+  if(fillBusy) return;
+  fillBusy = true;
+  try{
+    while(fillQueue.length){
+      const addr = fillQueue.shift(); fillSet.delete(addr);
+      try{ await loadFills(addr); } catch(e){ console.warn("fills", addr, e); }
+      await sleep(FILL_GAP);
+    }
+  } finally { fillBusy = false; }
+}
+function ltFillsFallback(addr){
+  // Sin historial de operaciones: el inicio se muestra como "antes de <primera vez que la vimos>".
+  state.walletPositions.filter(p => p.address === addr).forEach(p=>{
+    const key = okey(addr, p.coin, p.side);
+    if(!openMap[key]) openMap[key] = { t: Date.now(), exact: false, bound: true };
+  });
+  act24[addr] = { ts: Date.now(), list: [], na: true };
+  saveJson(OPEN_KEY, openMap); saveJson(ACT_KEY, act24);
+  renderWalletsTable();
+  if(wmCurrentAddress === addr){
+    const w = state.wallets.find(x => x.address === addr);
+    if(w){ renderWalletModalSummary(w); renderWalletModalPositions(addr); }
+  }
+}
+// Reconcilia con el historial real de operaciones (fills marcados como liquidación): recupera
+// las que ocurrieron con la app cerrada y corrige la hora/precio exactos de las ya detectadas.
+function reconcileLiqFills(addr, fills){
+  const liq = fills.filter(f => f.liq && f.time >= Date.now() - 7 * DAY && (!f.liqUser || f.liqUser.toLowerCase() === realAddr(addr).toLowerCase()));
+  if(!liq.length) return;
+  const groups = [];
+  liq.slice().sort((a,b) => a.time - b.time).forEach(f=>{
+    const g = groups.find(x => x.coin === f.coin && Math.abs(f.time - x.last) <= 600000);
+    if(g){ g.last = f.time; g.notional += f.px * f.sz; g.sz += f.sz; }
+    else groups.push({ coin: f.coin, first: f.time, last: f.time, px: f.px, notional: f.px * f.sz, sz: f.sz, dir: f.dir });
+  });
+  const w = state.wallets.find(x => x.address === addr);
+  let changed = false;
+  groups.forEach(g=>{
+    const t = Math.floor(g.first / 1000);
+    const ev = state.walletLiqEvents.find(e => e.address === addr && e.coin === g.coin && Math.abs(e.time - t) <= 6 * 3600);
+    if(ev){ if(!ev.confirmed){ ev.time = t; ev.price = g.px; ev.confirmed = true; changed = true; } return; }
+    state.walletLiqEvents.push({
+      time: t, coin: g.coin, price: g.px, name: w ? walletLabel(w) : shortAddr(addr),
+      side: /short/i.test(g.dir) ? "short" : "long", leverage: null, address: addr,
+      notional: g.notional, size: g.sz, confirmed: true
+    });
+    changed = true;
+  });
+  if(changed){
+    if(state.walletLiqEvents.length > 300) state.walletLiqEvents = state.walletLiqEvents.slice(-300);
+    saveCachedWalletLiqEvents();
+    try{ renderWalletLiqHistory(); updateChartMarkers(); renderChartLiqOverlay(); }catch(e){}
+  }
+}
+async function loadFills(addr){
+  let fills;
+  if(isLtKey(addr)){
+    fills = await ltLoadFills(addr);
+    if(fills == null){ ltFillsFallback(addr); return; }
+  } else {
+    const data = await apiPost({ type: "userFills", user: addr }, 20000, 1);
+    fills = (Array.isArray(data) ? data : []).map(f => ({
+      coin: f.coin, time: Number(f.time), px: parseFloat(f.px), sz: parseFloat(f.sz), dir: f.dir || "",
+      start: parseFloat(f.startPosition), pnl: parseFloat(f.closedPnl) || 0, oid: f.oid,
+      liq: !!f.liquidation || /liquidat/i.test(f.dir || ""), liqUser: f.liquidation ? f.liquidation.liquidatedUser : null
+    })).filter(f => f.coin && isFinite(f.time)).sort((a,b) => b.time - a.time);
+  }
+  try{ reconcileLiqFills(addr, fills); }catch(e){ console.warn("liq-reconcile", e); }
+  const cut = Date.now() - DAY;
+  act24[addr] = { ts: Date.now(), list: fills.filter(f => f.time >= cut).slice(0, 150) };
+  state.walletPositions.filter(p => p.address === addr).forEach(p=>{
+    const key = okey(addr, p.coin, p.side);
+    const cf = fills.filter(f => f.coin === p.coin);
+    // el inicio es el fill más reciente que partió desde posición 0 (o un cambio de lado)
+    const start = cf.find(f => f.start === 0 || f.dir.indexOf(">") >= 0);
+    if(start) openMap[key] = { t: start.time, exact: true };
+    else if(openMap[key] && openMap[key].approx) openMap[key].tried = true;
+    else if(cf.length || fills.length){
+      const old = cf.length ? cf[cf.length - 1] : fills[fills.length - 1];
+      openMap[key] = { t: old.time, exact: false, bound: true };
+    }
+  });
+  saveJson(OPEN_KEY, openMap); saveJson(ACT_KEY, act24);
+  renderWalletsTable();
+  if(wmCurrentAddress === addr){
+    const w = state.wallets.find(x => x.address === addr);
+    if(w){ renderWalletModalSummary(w); renderWalletModalPositions(addr); }
+  }
+}
+function scheduleFillLookups(wallets, fresh){
+  const items = [];
+  wallets.forEach(w=>{
+    if(!fresh.has(w.address)) return;
+    const ps = fresh.get(w.address);
+    const keep = new Set(ps.map(p => okey(w.address, p.coin, p.side)));
+    Object.keys(openMap).forEach(k => { if(k.indexOf(w.address + "|") === 0 && !keep.has(k)) delete openMap[k]; });
+    if(!ps.length) return;
+    const needOpen = ps.some(p => { const o = getOpen(p); return !o || (o.approx && !o.tried); });
+    const a = act24[w.address];
+    if(needOpen || !a || Date.now() - a.ts > ACT_TTL) items.push({ addr: w.address, n: ps.reduce((t,p) => t + p.notional, 0) });
+  });
+  saveJson(OPEN_KEY, openMap);
+  items.sort((x,y) => y.n - x.n).forEach(i => queueFills(i.addr));
+}
+el("walletsTableBody").addEventListener("click", (e)=>{
+  const tr = e.target.closest("tr[data-addr]"); if(!tr) return;
+  openWalletDetail(tr.getAttribute("data-addr"), { coin: tr.getAttribute("data-coin") });
+});
+el("walletsLiqHistoryList").addEventListener("click", (e)=>{
+  const row = e.target.closest(".wlh-row"); if(!row) return;
+  const addr = row.getAttribute("data-addr");
+  if(!state.wallets.some(w => w.address === addr)){ toast("Esa wallet ya no está en tu monitoreo.", true); return; }
+  openWalletDetail(addr, { liqTime: row.getAttribute("data-t") });
+});
+el("alertsList").addEventListener("click", (e)=>{
+  const row = e.target.closest(".alert-row"); if(!row) return;
+  const a = alertsList.find(x => x.id === row.getAttribute("data-id"));
+  if(!a) return;
+  if(!a.read){ a.read = true; saveAlerts(); row.classList.remove("unread"); renderAlerts(); }   // al tocarla se da por revisada
+  if(!a.addr) return;
+  if(!state.wallets.some(w => w.address === a.addr)){ toast("Esa wallet ya no está en tu monitoreo.", true); return; }
+  closeAlerts();
+  openWalletDetail(a.addr, { coin: a.coin, liqTime: a.detail && a.detail.evTime });
+});
+
+/* ---- accesos directos (?tab=positions|alerts|liquidated) y teclado en botones ---- */
+document.querySelectorAll('[role="button"],[role="switch"]').forEach(n=>{
+  n.addEventListener("keydown", (e)=>{ if(e.key === "Enter" || e.key === " "){ e.preventDefault(); n.click(); } });
+});
+(function(){
+  const tab = new URLSearchParams(location.search).get("tab");
+  if(tab === "positions") el("wsubPositionsBtn").click();
+  else if(tab === "liquidated") el("wsubLiquidatedBtn").click();
+  else if(tab === "alerts") openAlerts();
+})();
+
+if(state.autoRefresh) startWalletLoop(); else refreshAllWallets();
+
+})();
+</script>
+<script>
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js').catch((err) => {
+        console.warn('No se pudo registrar el service worker', err);
+      });
+    });
+  }
+</script>
+</body>
+</html>
